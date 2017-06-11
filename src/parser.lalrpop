@@ -1,0 +1,92 @@
+use std::str::FromStr;
+use ast::{Expr, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode};
+use lalrpop_util::ErrorRecovery;
+
+// ErrorRecovery< locationType, tokenType, errorType >
+grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
+
+match {
+    "wire",
+    r"0b[01]+" => BIN,
+    r"0x[0-9a-fA-F]" => HEX,
+    r"0o[0-7]" => OCT,
+} else {
+    r"[0-9]+" => DEC,
+} else {
+    r"\w+" => ID,
+    _
+}
+
+Comma<T>: Vec<T> = {
+    <v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+WireDecl : WireDecl = {
+    <name:ID> ":" <w:DEC> => match WireWidth::from_str(w) {
+        Ok(width) => WireDecl { name: String::from(name), width: width },
+        Err(_) => {
+            panic!() /* FIXME */
+        }
+    }
+};
+
+pub WireDecls : Vec<WireDecl> = {
+    "wire" <c:Comma<WireDecl>> ";" => c
+};
+
+BinOpAddSub : BinOpCode = {
+    "+" => BinOpCode::Add,
+    "-" => BinOpCode::Sub,
+    "|" => BinOpCode::Or,
+};
+
+BinOpMulDiv : BinOpCode = {
+    "*" => BinOpCode::Mul,
+    "/" => BinOpCode::Div,
+    "^" => BinOpCode::Xor,
+    "&" => BinOpCode::And, // FIXME: Correct precedence?
+};
+
+
+BinOpCompare : BinOpCode = {
+    "==" => BinOpCode::Equal,
+    "!=" => BinOpCode::NotEqual,
+    "<=" => BinOpCode::LessEqual,
+    ">=" => BinOpCode::GreaterEqual,
+    "<" => BinOpCode::Less,
+    ">" => BinOpCode::Greater,
+};
+
+BinTier<Op,NextTier> : Box<Expr> = {
+    <l:BinTier<Op,NextTier>> <o:Op> <r:NextTier> =>
+        Box::new(Expr::BinOp(o, l, r)),
+    NextTier
+};
+
+ExprCompare = BinTier<BinOpCompare, ExprAddSub>;
+ExprAddSub = BinTier<BinOpAddSub, ExprMulDiv>;
+ExprMulDiv = BinTier<BinOpMulDiv, Term>;
+
+UnOp : UnOpCode = {
+    "-" => UnOpCode::Negate,
+    "~" => UnOpCode::Complement,
+};
+
+// FIXME: handle numbers being too large
+pub Term : Box<Expr> = {
+    DEC => Box::new(Expr::Constant(WireValue::from_str(<>).unwrap(), 0)),
+    HEX => Box::new(Expr::Constant(WireValue::from_str_radix(&<>[2..], 16).unwrap(), 0)),
+    BIN => Box::new(Expr::Constant(WireValue::from_str_radix(&<>[2..], 2).unwrap(), <>.len() - 2)),
+    "(" <e:Expr> ")" => e,
+};
+
+pub Expr: Box<Expr> = {
+    ExprCompare,
+};

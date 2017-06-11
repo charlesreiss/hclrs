@@ -1,0 +1,22 @@
+[package]
+name = "hclrs"
+version = "0.1.0"
+authors = ["Charles Reiss <cr4bd@virginia.edu>"]
+
+build = "build.rs" # LARLRPOP preprocessing
+
+# For tokenization
+[dependencies.regex]
+version = "0.2.1"
+
+# Parser runtime library
+[dependencies.lalrpop-util]
+version = "0.13.0"
+
+# Parser library
+[build-dependencies.lalrpop]
+version = "0.13.0"
+
+# For u128
+[dependencies.extprim]
+version = "1.2.2"
