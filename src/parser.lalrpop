@@ -6,10 +6,17 @@ use lalrpop_util::ErrorRecovery;
 grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
 
 match {
+    "&&", // over &
+    "||",
+    ">=", // over >
+    ">>",
+    "<=",
+    "<<",
+    "!=", // over !
     "wire",
     r"0b[01]+" => BIN,
-    r"0x[0-9a-fA-F]" => HEX,
-    r"0o[0-7]" => OCT,
+    r"0x[0-9a-fA-F]+" => HEX,
+    r"0o[0-7]+" => OCT,
 } else {
     r"[0-9]+" => DEC,
 } else {
@@ -44,16 +51,24 @@ pub WireDecls : Vec<WireDecl> = {
 BinOpAddSub : BinOpCode = {
     "+" => BinOpCode::Add,
     "-" => BinOpCode::Sub,
+};
+
+BinOpAnd : BinOpCode = {
+    "&" => BinOpCode::And,
+};
+
+BinOpXor : BinOpCode = {
+    "^" => BinOpCode::Xor,
+};
+
+BinOpOr : BinOpCode = {
     "|" => BinOpCode::Or,
 };
 
 BinOpMulDiv : BinOpCode = {
     "*" => BinOpCode::Mul,
     "/" => BinOpCode::Div,
-    "^" => BinOpCode::Xor,
-    "&" => BinOpCode::And, // FIXME: Correct precedence?
 };
-
 
 BinOpCompare : BinOpCode = {
     "==" => BinOpCode::Equal,
@@ -64,13 +79,32 @@ BinOpCompare : BinOpCode = {
     ">" => BinOpCode::Greater,
 };
 
+BinOpLogicalAnd : BinOpCode = {
+    "&&" => BinOpCode::LogicalAnd,
+};
+
+BinOpLogicalOr : BinOpCode = {
+    "||" => BinOpCode::LogicalOr,
+};
+
+BinOpShift : BinOpCode = {
+    "<<" => BinOpCode::LeftShift,
+    ">>" => BinOpCode::RightShift,
+};
+
 BinTier<Op,NextTier> : Box<Expr> = {
     <l:BinTier<Op,NextTier>> <o:Op> <r:NextTier> =>
         Box::new(Expr::BinOp(o, l, r)),
     NextTier
 };
 
-ExprCompare = BinTier<BinOpCompare, ExprAddSub>;
+ExprLogicalOr = BinTier<BinOpLogicalOr, ExprLogicalAnd>;
+ExprLogicalAnd = BinTier<BinOpLogicalAnd, ExprCompare>;
+ExprCompare = BinTier<BinOpCompare, ExprOr>;
+ExprOr = BinTier<BinOpOr, ExprXor>;
+ExprXor = BinTier<BinOpXor, ExprAnd>;
+ExprAnd = BinTier<BinOpAnd, ExprShift>;
+ExprShift = BinTier<BinOpShift, ExprAddSub>;
 ExprAddSub = BinTier<BinOpAddSub, ExprMulDiv>;
 ExprMulDiv = BinTier<BinOpMulDiv, Term>;
 
@@ -81,12 +115,12 @@ UnOp : UnOpCode = {
 
 // FIXME: handle numbers being too large
 pub Term : Box<Expr> = {
-    DEC => Box::new(Expr::Constant(WireValue::from_str(<>).unwrap(), 0)),
-    HEX => Box::new(Expr::Constant(WireValue::from_str_radix(&<>[2..], 16).unwrap(), 0)),
-    BIN => Box::new(Expr::Constant(WireValue::from_str_radix(&<>[2..], 2).unwrap(), <>.len() - 2)),
+    DEC => Box::new(Expr::Constant(WireValue::from_decimal(<>))),
+    HEX => Box::new(Expr::Constant(WireValue::from_hexadecimal(&<>[2..]))),
+    BIN => Box::new(Expr::Constant(WireValue::from_binary(&<>[2..]))),
     "(" <e:Expr> ")" => e,
 };
 
 pub Expr: Box<Expr> = {
-    ExprCompare,
+    ExprLogicalOr,
 };
