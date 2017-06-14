@@ -8,6 +8,8 @@ mod ast;
 use parser::{parse_Expr, parse_WireDecls};
 #[cfg(test)]
 use ast::{Expr, WireDecl, WireValue, WireWidth, BinOpCode, UnOpCode};
+#[cfg(test)]
+use extprim::u128::u128;
 
 fn main() {
     let mut errors = Vec::new();
@@ -96,4 +98,21 @@ fn test_wiredecls() {
         vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(64) })
     );
     assert_eq!(errors, vec!());
+}
+
+#[test]
+fn test_eval_binaryops() {
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "0b1000 & 15").unwrap().evaluate(),
+        Ok(WireValue { bits: u128::new(8), width: WireWidth::Bits(4) })
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "0b1000 & 15 == 0x8").unwrap().evaluate(),
+        Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "1 ^ 0xFFFF == 0xFFFE").unwrap().evaluate(),
+        Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
+    );
 }
