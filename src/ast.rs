@@ -15,6 +15,7 @@ use self::num_traits::cast::ToPrimitive;
 pub enum Error {
     MismatchedWidths,
     UndefinedWire(String),
+    // FIXME: multiple errors?
 }
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq)]
@@ -142,6 +143,12 @@ enum BinOpKind {
 pub struct WireDecl {
     pub name: String,
     pub width: WireWidth,
+}
+
+#[derive(Debug,Eq,PartialEq)]
+pub struct ConstDecl {
+    pub name: String,
+    pub value: Box<Expr>,
 }
 
 #[derive(Debug,Eq,PartialEq,Clone,Copy)]
@@ -337,7 +344,8 @@ pub struct Assignment {
 
 #[derive(Debug,Eq,PartialEq)]
 pub enum Statement {
-    WireDecl(WireDecl),
+    ConstDecls(Vec<ConstDecl>),
+    WireDecls(Vec<WireDecl>),
     Assignment(Assignment),
 }
 

@@ -52,6 +52,8 @@ pub WireDecls : Vec<WireDecl> = {
     "wire" <c:Comma<WireDecl>> ";" => c
 };
 
+// FIXME: ConstDecls
+
 BinOpAddSub : BinOpCode = {
     "+" => BinOpCode::Add,
     "-" => BinOpCode::Sub,
@@ -150,5 +152,5 @@ Assignment : Assignment = {
 
 pub Statement : Statement = {
     Assignment => Statement::Assignment(<>),
-    WireDecl => Statement::WireDecl(<>),
+    WireDecls => Statement::WireDecls(<>),
 };
