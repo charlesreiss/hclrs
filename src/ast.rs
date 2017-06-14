@@ -227,10 +227,20 @@ impl BinOpCode {
     }
 }
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Copy,Clone)]
 pub enum UnOpCode {
     Negate,
     Complement,
+}
+
+impl UnOpCode {
+    fn apply(self, value: WireValue) -> Result<WireValue, Error> {
+        let new_value = match self {
+            UnOpCode::Negate => !value.bits + u128::new(1),
+            UnOpCode::Complement => !value.bits,
+        };
+        Ok(WireValue { bits: new_value & value.width.mask(), width: value.width })
+    }
 }
 
 #[derive(Debug,Eq,PartialEq)]
@@ -271,7 +281,11 @@ impl Expr {
                 let left_value = try!(left.evaluate());
                 let right_value = try!(right.evaluate());
                 opcode.apply(left_value, right_value)
-            }
+            },
+            Expr::UnOp(opcode, ref inner) => {
+                let inner_value = try!(inner.evaluate());
+                opcode.apply(inner_value)
+            },
             _ => unimplemented!(),
         }
     }

@@ -119,6 +119,7 @@ pub Term : Box<Expr> = {
     HEX => Box::new(Expr::Constant(WireValue::from_hexadecimal(&<>[2..]))),
     BIN => Box::new(Expr::Constant(WireValue::from_binary(&<>[2..]))),
     "(" <e:Expr> ")" => e,
+    <u:UnOp> <t:Term> => Box::new(Expr::UnOp(u, t)),
 };
 
 pub Expr: Box<Expr> = {

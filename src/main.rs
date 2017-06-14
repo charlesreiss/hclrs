@@ -83,6 +83,29 @@ fn test_binops() {
 }
 
 #[test]
+fn test_unops() {
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "-0b1000").unwrap(),
+        Box::new(Expr::UnOp(UnOpCode::Negate, Box::new(Expr::Constant(WireValue::from_binary("1000")))))
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "1+-0b1000").unwrap(),
+        Box::new(Expr::BinOp(BinOpCode::Add,
+            Box::new(Expr::Constant(WireValue::from_decimal("1"))),
+            Box::new(Expr::UnOp(UnOpCode::Negate,
+                Box::new(Expr::Constant(WireValue::from_binary("1000")))))
+        ))
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "~42").unwrap(),
+        Box::new(Expr::UnOp(UnOpCode::Complement,
+            Box::new(Expr::Constant(WireValue::from_decimal("42")))))
+    );
+    assert_eq!(errors, vec!());
+}
+
+#[test]
 fn test_wiredecls() {
     let mut errors = Vec::new();
     assert_eq!(
@@ -116,3 +139,26 @@ fn test_eval_binaryops() {
         Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
     );
 }
+
+#[test]
+fn test_eval_unops() {
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "-0b1000").unwrap().evaluate(),
+        Ok(WireValue::from_binary("1000"))
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "-0b01000").unwrap().evaluate(),
+        Ok(WireValue::from_binary("11000"))
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "1+-0b01000").unwrap().evaluate(),
+        Ok(WireValue::from_binary("11001"))
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "~42").unwrap().evaluate(),
+        Ok(WireValue { bits: !u128::new(42), width: WireWidth::Unlimited })
+    );
+    assert_eq!(errors, vec!());
+}
+
