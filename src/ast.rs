@@ -348,31 +348,3 @@ pub enum Statement {
     WireDecls(Vec<WireDecl>),
     Assignment(Assignment),
 }
-
-// FIXME: probably another file for program, et al
-//        esp. since it needs to reference fixed functionality
-#[derive(Debug)]
-pub struct Program {
-    declarations: Vec<WireDecl>,
-    assignments: Vec<Assignment>,
-    // FIXME: register banks
-}
-
-impl Program {
-    fn sort_assignments() {
-        unimplemented!();
-    }
-
-    pub fn errors() -> Vec<Error> {
-        unimplemented!();
-    }
-
-    pub fn initial_state() -> WireValues {
-        unimplemented!();
-    }
-
-    pub fn step(input: WireValues) -> WireValues {
-        unimplemented!();
-    }
-}
-
