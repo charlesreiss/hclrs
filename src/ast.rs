@@ -5,6 +5,8 @@ use extprim::u128::u128;
 
 use std::str::FromStr;
 use std::num::ParseIntError;
+use std::collections::hash_map::HashMap;
+use std::collections::hash_set::HashSet;
 use std::cmp;
 
 use self::num_traits::cast::ToPrimitive;
@@ -12,6 +14,7 @@ use self::num_traits::cast::ToPrimitive;
 #[derive(Debug,Eq,PartialEq)]
 pub enum Error {
     MismatchedWidths,
+    UndefinedWire(String),
 }
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq)]
@@ -258,49 +261,70 @@ pub enum Expr {
     NamedWire(String),
 }
 
+type WireValues = HashMap<String, WireValue>;
+
 impl Expr {
-    pub fn width(&self) -> Result<WireWidth, Error> {
+    pub fn width(&self, wires: &WireValues) -> Result<WireWidth, Error> {
         match *self {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
                 match opcode.kind() {
-                    BinOpKind::EqualWidth => try!(left.width()).combine(try!(right.width())),
+                    BinOpKind::EqualWidth => try!(left.width(wires)).combine(try!(right.width(wires))),
                     BinOpKind::Boolean => Ok(WireWidth::Bits(1)),
                 },
             Expr::Mux(ref options) =>
                 options.iter().fold(Ok(WireWidth::Unlimited),
-                                    |maybe_width, ref item| try!(maybe_width).combine(try!(item.value.width()))),
+                                    |maybe_width, ref item| try!(maybe_width).combine(try!(item.value.width(wires)))),
             Expr::UnOp(UnOpCode::Negate, _) => Ok(WireWidth::Bits(1)),
-            Expr::UnOp(UnOpCode::Complement, ref covered) => covered.width(),
+            Expr::UnOp(UnOpCode::Complement, ref covered) => covered.width(wires),
+            Expr::NamedWire(ref name) => match wires.get(name) {
+                Some(value) => Ok(value.width),
+                None => Err(Error::UndefinedWire(name.clone())),
+            },
             _ => unimplemented!(),
         }
     }
 
-    pub fn evaluate(&self) -> Result<WireValue, Error> {
+    pub fn evaluate_constant(&self) -> Result<WireValue, Error> {
+        self.evaluate(&WireValues::new())
+    }
+
+    pub fn evaluate(&self, wires: &WireValues) -> Result<WireValue, Error> {
         match *self {
             Expr::Constant(value) => Ok(value),
             Expr::BinOp(opcode, ref left, ref right) => {
-                let left_value = try!(left.evaluate());
-                let right_value = try!(right.evaluate());
+                let left_value = try!(left.evaluate(wires));
+                let right_value = try!(right.evaluate(wires));
                 opcode.apply(left_value, right_value)
             },
             Expr::UnOp(opcode, ref inner) => {
-                let inner_value = try!(inner.evaluate());
+                let inner_value = try!(inner.evaluate(wires));
                 opcode.apply(inner_value)
             },
             Expr::Mux(ref options) => {
                 let mut result: WireValue = WireValue::new(u128::new(0));
                 // FIXME: consider warning for using default?
                 for ref option in options {
-                    if try!(option.condition.evaluate()).is_true() {
-                        result = try!(option.value.evaluate());
+                    if try!(option.condition.evaluate(wires)).is_true() {
+                        result = try!(option.value.evaluate(wires));
                         break;
                     } 
                 }
-                Ok(result.as_width(try!(self.width())))
+                Ok(result.as_width(try!(self.width(wires))))
             },
-            _ => unimplemented!(),
+            Expr::NamedWire(ref name) => match wires.get(name) {
+                Some(value) => Ok(*value),
+                None => Err(Error::UndefinedWire(name.clone())),
+            },
         }
+    }
+
+    pub fn referenced_wires() -> HashSet<String> {
+        unimplemented!();
+    }
+
+    pub fn errors() -> Vec<Error> {
+        unimplemented!();
     }
 }
 
@@ -316,3 +340,31 @@ pub enum Statement {
     WireDecl(WireDecl),
     Assignment(Assignment),
 }
+
+// FIXME: probably another file for program, et al
+//        esp. since it needs to reference fixed functionality
+#[derive(Debug)]
+pub struct Program {
+    declarations: Vec<WireDecl>,
+    assignments: Vec<Assignment>,
+    // FIXME: register banks
+}
+
+impl Program {
+    fn sort_assignments() {
+        unimplemented!();
+    }
+
+    pub fn errors() -> Vec<Error> {
+        unimplemented!();
+    }
+
+    pub fn initial_state() -> WireValues {
+        unimplemented!();
+    }
+
+    pub fn step(input: WireValues) -> WireValues {
+        unimplemented!();
+    }
+}
+

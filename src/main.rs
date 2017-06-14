@@ -168,15 +168,15 @@ fn test_wiredecls() {
 fn test_eval_binaryops() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr(&mut errors, "0b1000 & 15").unwrap().evaluate(),
+        parse_Expr(&mut errors, "0b1000 & 15").unwrap().evaluate_constant(),
         Ok(WireValue { bits: u128::new(8), width: WireWidth::Bits(4) })
     );
     assert_eq!(
-        parse_Expr(&mut errors, "0b1000 & 15 == 0x8").unwrap().evaluate(),
+        parse_Expr(&mut errors, "0b1000 & 15 == 0x8").unwrap().evaluate_constant(),
         Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
     );
     assert_eq!(
-        parse_Expr(&mut errors, "1 ^ 0xFFFF == 0xFFFE").unwrap().evaluate(),
+        parse_Expr(&mut errors, "1 ^ 0xFFFF == 0xFFFE").unwrap().evaluate_constant(),
         Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
     );
 }
@@ -185,19 +185,19 @@ fn test_eval_binaryops() {
 fn test_eval_unops() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr(&mut errors, "-0b1000").unwrap().evaluate(),
+        parse_Expr(&mut errors, "-0b1000").unwrap().evaluate_constant(),
         Ok(WireValue::from_binary("1000"))
     );
     assert_eq!(
-        parse_Expr(&mut errors, "-0b01000").unwrap().evaluate(),
+        parse_Expr(&mut errors, "-0b01000").unwrap().evaluate_constant(),
         Ok(WireValue::from_binary("11000"))
     );
     assert_eq!(
-        parse_Expr(&mut errors, "1+-0b01000").unwrap().evaluate(),
+        parse_Expr(&mut errors, "1+-0b01000").unwrap().evaluate_constant(),
         Ok(WireValue::from_binary("11001"))
     );
     assert_eq!(
-        parse_Expr(&mut errors, "~42").unwrap().evaluate(),
+        parse_Expr(&mut errors, "~42").unwrap().evaluate_constant(),
         Ok(WireValue { bits: !u128::new(42), width: WireWidth::Unlimited })
     );
     assert_eq!(errors, vec!());
@@ -207,7 +207,7 @@ fn test_eval_unops() {
 fn test_eval_mux() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap().evaluate(),
+        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap().evaluate_constant(),
         Ok(WireValue { bits: u128::new(43), width: WireWidth::Unlimited })
     );
     // FIXME: more tests
