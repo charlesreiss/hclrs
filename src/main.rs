@@ -5,9 +5,9 @@ extern crate extprim;
 pub mod parser;
 mod ast;
 
-use parser::{parse_Expr, parse_WireDecls};
+use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls};
 #[cfg(test)]
-use ast::{Expr, WireDecl, WireValue, WireWidth, BinOpCode, UnOpCode, MuxOption};
+use ast::{Expr, ConstDecl, WireDecl, WireValue, WireWidth, BinOpCode, UnOpCode, MuxOption};
 #[cfg(test)]
 use extprim::u128::u128;
 
@@ -160,6 +160,23 @@ fn test_wiredecls() {
     assert_eq!(
         parse_WireDecls(&mut errors, "wire x : 64;").unwrap(),
         vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(64) })
+    );
+    assert_eq!(errors, vec!());
+}
+
+#[test]
+fn test_constdecls() {
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_ConstDecls(&mut errors, "const x = 0x42, y=0;").unwrap(),
+        vec!(
+            ConstDecl { name: String::from("x"), value: Box::new(
+                Expr::Constant(WireValue::from_hexadecimal("42"))
+            ) },
+            ConstDecl { name: String::from("y"), value: Box::new(
+                Expr::Constant(WireValue::from_decimal("0"))
+            ) }
+        )
     );
     assert_eq!(errors, vec!());
 }

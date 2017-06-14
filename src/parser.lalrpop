@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use ast::{Expr, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, Statement};
+use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, Statement};
 use lalrpop_util::ErrorRecovery;
 
 // ErrorRecovery< locationType, tokenType, errorType >
@@ -14,6 +14,7 @@ match {
     "<<",
     "!=", // over !
     "wire",
+    "const",
     r"0b[01]+" => BIN,
     r"0x[0-9a-fA-F]+" => HEX,
     r"0o[0-7]+" => OCT,
@@ -53,6 +54,14 @@ pub WireDecls : Vec<WireDecl> = {
 };
 
 // FIXME: ConstDecls
+
+ConstDecl : ConstDecl = {
+    <name:ID> "=" <e:Expr> => ConstDecl { name: String::from(name), value: e }
+};
+
+pub ConstDecls : Vec<ConstDecl> = {
+    "const" <c:Comma<ConstDecl>> ";" => c
+};
 
 BinOpAddSub : BinOpCode = {
     "+" => BinOpCode::Add,
@@ -153,4 +162,5 @@ Assignment : Assignment = {
 pub Statement : Statement = {
     Assignment => Statement::Assignment(<>),
     WireDecls => Statement::WireDecls(<>),
+    ConstDecls => Statement::ConstDecls(<>),
 };
