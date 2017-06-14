@@ -7,7 +7,7 @@ mod ast;
 
 use parser::{parse_Expr, parse_WireDecls};
 #[cfg(test)]
-use ast::{Expr, WireDecl, WireValue, WireWidth, BinOpCode, UnOpCode};
+use ast::{Expr, WireDecl, WireValue, WireWidth, BinOpCode, UnOpCode, MuxOption};
 #[cfg(test)]
 use extprim::u128::u128;
 
@@ -106,6 +106,47 @@ fn test_unops() {
 }
 
 #[test]
+fn test_mux() {
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap(),
+        Box::new(Expr::Mux(vec!(
+            MuxOption { 
+                condition: Box::new(Expr::Constant(WireValue::from_decimal("0"))),
+                value: Box::new(Expr::Constant(WireValue::from_decimal("42"))),
+            },
+            MuxOption { 
+                condition: Box::new(Expr::Constant(WireValue::from_hexadecimal("42"))),
+                value: Box::new(Expr::Constant(WireValue::from_decimal("43"))),
+            },
+            MuxOption { 
+                condition: Box::new(Expr::Constant(WireValue::from_decimal("1"))),
+                value: Box::new(Expr::Constant(WireValue::from_decimal("44"))),
+            }
+        )))
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44 ]").unwrap(),
+        Box::new(Expr::Mux(vec!(
+            MuxOption { 
+                condition: Box::new(Expr::Constant(WireValue::from_decimal("0"))),
+                value: Box::new(Expr::Constant(WireValue::from_decimal("42"))),
+            },
+            MuxOption { 
+                condition: Box::new(Expr::Constant(WireValue::from_hexadecimal("42"))),
+                value: Box::new(Expr::Constant(WireValue::from_decimal("43"))),
+            },
+            MuxOption { 
+                condition: Box::new(Expr::Constant(WireValue::from_decimal("1"))),
+                value: Box::new(Expr::Constant(WireValue::from_decimal("44"))),
+            }
+        )))
+    );
+    assert_eq!(errors, vec!());
+}
+
+
+#[test]
 fn test_wiredecls() {
     let mut errors = Vec::new();
     assert_eq!(
@@ -162,3 +203,12 @@ fn test_eval_unops() {
     assert_eq!(errors, vec!());
 }
 
+#[test]
+fn test_eval_mux() {
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap().evaluate(),
+        Ok(WireValue { bits: u128::new(43), width: WireWidth::Unlimited })
+    );
+    // FIXME: more tests
+}

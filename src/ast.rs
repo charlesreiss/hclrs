@@ -245,8 +245,8 @@ impl UnOpCode {
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct MuxOption {
-    condition: Box<Expr>,
-    value: Box<Expr>,
+    pub condition: Box<Expr>,
+    pub value: Box<Expr>,
 }
 
 #[derive(Debug,Eq,PartialEq)]
@@ -286,6 +286,17 @@ impl Expr {
                 let inner_value = try!(inner.evaluate());
                 opcode.apply(inner_value)
             },
+            Expr::Mux(ref options) => {
+                let mut result: WireValue = WireValue::new(u128::new(0));
+                // FIXME: consider warning for using default?
+                for ref option in options {
+                    if try!(option.condition.evaluate()).is_true() {
+                        result = try!(option.value.evaluate());
+                        break;
+                    } 
+                }
+                Ok(result.as_width(try!(self.width())))
+            }
             _ => unimplemented!(),
         }
     }

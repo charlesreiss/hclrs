@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use ast::{Expr, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode};
+use ast::{Expr, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption};
 use lalrpop_util::ErrorRecovery;
 
 // ErrorRecovery< locationType, tokenType, errorType >
@@ -26,6 +26,17 @@ match {
 
 Comma<T>: Vec<T> = {
     <v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+Semicolon<T>: Vec<T> = {
+    <v:(<T> ";")*> <e:T?> => match e {
         None => v,
         Some(e) => {
             let mut v = v;
@@ -113,6 +124,12 @@ UnOp : UnOpCode = {
     "~" => UnOpCode::Complement,
 };
 
+MuxOption : MuxOption = {
+    <l:Expr> ":" <r:Expr> => MuxOption { condition: l, value: r },
+};
+
+MuxOptions = Semicolon<MuxOption>;
+
 // FIXME: handle numbers being too large
 pub Term : Box<Expr> = {
     DEC => Box::new(Expr::Constant(WireValue::from_decimal(<>))),
@@ -120,6 +137,7 @@ pub Term : Box<Expr> = {
     BIN => Box::new(Expr::Constant(WireValue::from_binary(&<>[2..]))),
     "(" <e:Expr> ")" => e,
     <u:UnOp> <t:Term> => Box::new(Expr::UnOp(u, t)),
+    "[" <e:MuxOptions> "]" => Box::new(Expr::Mux(e)),
 };
 
 pub Expr: Box<Expr> = {
