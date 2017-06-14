@@ -255,6 +255,7 @@ pub enum Expr {
     BinOp(BinOpCode, Box<Expr>, Box<Expr>),
     UnOp(UnOpCode, Box<Expr>),
     Mux(Vec<MuxOption>),
+    NamedWire(String),
 }
 
 impl Expr {
@@ -271,6 +272,7 @@ impl Expr {
                                     |maybe_width, ref item| try!(maybe_width).combine(try!(item.value.width()))),
             Expr::UnOp(UnOpCode::Negate, _) => Ok(WireWidth::Bits(1)),
             Expr::UnOp(UnOpCode::Complement, ref covered) => covered.width(),
+            _ => unimplemented!(),
         }
     }
 
@@ -296,8 +298,21 @@ impl Expr {
                     } 
                 }
                 Ok(result.as_width(try!(self.width())))
-            }
+            },
             _ => unimplemented!(),
         }
     }
+}
+
+#[derive(Debug,Eq,PartialEq)]
+pub struct Assignment {
+    pub names: Vec<String>,
+    pub value: Box<Expr>,
+}
+
+
+#[derive(Debug,Eq,PartialEq)]
+pub enum Statement {
+    WireDecl(WireDecl),
+    Assignment(Assignment),
 }

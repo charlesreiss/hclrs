@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use ast::{Expr, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption};
+use ast::{Expr, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, Statement};
 use lalrpop_util::ErrorRecovery;
 
 // ErrorRecovery< locationType, tokenType, errorType >
@@ -24,8 +24,8 @@ match {
     _
 }
 
-Comma<T>: Vec<T> = {
-    <v:(<T> ",")*> <e:T?> => match e {
+Repeat<delim, T>: Vec<T> = {
+    <v:(<T> delim)*> <e:T?> => match e {
         None => v,
         Some(e) => {
             let mut v = v;
@@ -35,16 +35,9 @@ Comma<T>: Vec<T> = {
     }
 };
 
-Semicolon<T>: Vec<T> = {
-    <v:(<T> ";")*> <e:T?> => match e {
-        None => v,
-        Some(e) => {
-            let mut v = v;
-            v.push(e);
-            v
-        }
-    }
-};
+Comma<T>: Vec<T> = Repeat<",", T>;
+
+Semicolon<T>: Vec<T> = Repeat<";", T>;
 
 WireDecl : WireDecl = {
     <name:ID> ":" <w:DEC> => match WireWidth::from_str(w) {
@@ -138,8 +131,24 @@ pub Term : Box<Expr> = {
     "(" <e:Expr> ")" => e,
     <u:UnOp> <t:Term> => Box::new(Expr::UnOp(u, t)),
     "[" <e:MuxOptions> "]" => Box::new(Expr::Mux(e)),
+    ID => Box::new(Expr::NamedWire(String::from(<>)))
 };
 
 pub Expr: Box<Expr> = {
     ExprLogicalOr,
+};
+
+Assignment : Assignment = {
+    <n:(<ID> "=")+> <v:Expr> => {
+        let mut names: Vec<String> = Vec::new();
+        for name in n {
+            names.push(String::from(name));
+        }
+        Assignment { names: names, value: v }
+    }
+};
+
+pub Statement : Statement = {
+    Assignment => Statement::Assignment(<>),
+    WireDecl => Statement::WireDecl(<>),
 };
