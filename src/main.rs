@@ -3,7 +3,6 @@ extern crate log;
 extern crate env_logger;
 
 extern crate lalrpop_util;
-#[cfg(test)]
 extern crate extprim;
 
 pub mod parser;
@@ -12,40 +11,57 @@ mod program;
 mod errors;
 
 use std::env;
+use std::fs::File;
+use std::io;
+use std::io::{BufReader, Read};
+use std::path::Path;
 use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 #[cfg(test)]
 use ast::{Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
 #[cfg(test)]
 use extprim::u128::u128;
-#[cfg(test)]
-use program::Program;
+use program::{Program, RunningProgram};
+
+use errors::Error;
 
 fn main() {
+    main_real().unwrap();
+}
+
+fn main_real() -> Result<(), Error> {
+    let args: Vec<String> = env::args().collect();
+    let mut filename: String = String::from("/dev/stdin");
+    match args.len() {
+        1 => {
+            println!("Usage: hclrs FILENAME");
+            return Ok(());
+        },
+        2 => filename = args[1].clone(),
+        _ => {
+            println!("Usage: hclrs FILENAME");
+            return Ok(());
+        },
+    }
+
+    let path = Path::new(&filename);
+
+    let file = File::open(path)?;
+    let mut file_reader = BufReader::new(file);
+    let mut contents = String::new();
+    try!(file_reader.read_to_string(&mut contents));
+
+    // FIXME: wrapping for ParseErrors (has lifetime issues)
     let mut errors = Vec::new();
-    println!(
-        "{:?}",
-        parse_WireDecls(&mut errors, "wire x:32, y:2, z:1;").unwrap()
-    );
-    println!(
-        "{:?}",
-        parse_Expr(&mut errors, "0b1000").unwrap()
-    );
-    println!(
-        "{:?}",
-        parse_Expr(&mut errors, "0b1000 * 15").unwrap()
-    );
-    println!(
-        "{:?}",
-        parse_Expr(&mut errors, "0b1000 * 15 + 1").unwrap()
-    );
-    println!(
-        "{:?}",
-        parse_Expr(&mut errors, "0b1000 * 15 + 1 > 0").unwrap()
-    );
-    println!(
-        "{:?}",
-        parse_Expr(&mut errors, "0b1000 & (15 + 1) > 5 && 0x1234 < 3 || 4 >= 1 << 1 / 5").unwrap()
-    );
+    let statements = parse_Statements(&mut errors, contents.as_str()).unwrap();
+
+    let program = Program::new(statements)?;
+    let mut running_program = RunningProgram::new(program);
+
+    while !running_program.done() && running_program.cycle() < 100 {
+        try!(running_program.step());
+    }
+    println!("{}", running_program.dump());
+    Ok(())
 }
 
 #[test]
@@ -194,16 +210,16 @@ fn test_constdecls() {
 fn test_eval_binaryops() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr(&mut errors, "0b1000 & 15").unwrap().evaluate_constant(),
-        Ok(WireValue { bits: u128::new(8), width: WireWidth::Bits(4) })
+        parse_Expr(&mut errors, "0b1000 & 15").unwrap().evaluate_constant().unwrap(),
+        WireValue { bits: u128::new(8), width: WireWidth::Bits(4) }
     );
     assert_eq!(
-        parse_Expr(&mut errors, "0b1000 & 15 == 0x8").unwrap().evaluate_constant(),
-        Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
+        parse_Expr(&mut errors, "0b1000 & 15 == 0x8").unwrap().evaluate_constant().unwrap(),
+        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
     );
     assert_eq!(
-        parse_Expr(&mut errors, "1 ^ 0xFFFF == 0xFFFE").unwrap().evaluate_constant(),
-        Ok(WireValue { bits: u128::new(1), width: WireWidth::Bits(1) })
+        parse_Expr(&mut errors, "1 ^ 0xFFFF == 0xFFFE").unwrap().evaluate_constant().unwrap(),
+        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
     );
 }
 
@@ -211,20 +227,20 @@ fn test_eval_binaryops() {
 fn test_eval_unops() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr(&mut errors, "-0b1000").unwrap().evaluate_constant(),
-        Ok(WireValue::from_binary("1000"))
+        parse_Expr(&mut errors, "-0b1000").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("1000")
     );
     assert_eq!(
-        parse_Expr(&mut errors, "-0b01000").unwrap().evaluate_constant(),
-        Ok(WireValue::from_binary("11000"))
+        parse_Expr(&mut errors, "-0b01000").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("11000")
     );
     assert_eq!(
-        parse_Expr(&mut errors, "1+-0b01000").unwrap().evaluate_constant(),
-        Ok(WireValue::from_binary("11001"))
+        parse_Expr(&mut errors, "1+-0b01000").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("11001")
     );
     assert_eq!(
-        parse_Expr(&mut errors, "~42").unwrap().evaluate_constant(),
-        Ok(WireValue { bits: !u128::new(42), width: WireWidth::Unlimited })
+        parse_Expr(&mut errors, "~42").unwrap().evaluate_constant().unwrap(),
+        WireValue { bits: !u128::new(42), width: WireWidth::Unlimited }
     );
     assert_eq!(errors, vec!());
 }
@@ -233,8 +249,8 @@ fn test_eval_unops() {
 fn test_eval_mux() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap().evaluate_constant(),
-        Ok(WireValue { bits: u128::new(43), width: WireWidth::Unlimited })
+        parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap().evaluate_constant().unwrap(),
+        WireValue { bits: u128::new(43), width: WireWidth::Unlimited }
     );
     // FIXME: more tests
 }

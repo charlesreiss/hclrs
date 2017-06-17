@@ -3,11 +3,12 @@ extern crate num_traits;
 
 use extprim::u128::u128;
 
-use std::str::FromStr;
-use std::num::ParseIntError;
+use std::cmp;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
-use std::cmp;
+use std::convert::From;
+use std::num::ParseIntError;
+use std::str::FromStr;
 
 use self::num_traits::cast::ToPrimitive;
 
@@ -89,6 +90,10 @@ impl WireValue {
         WireValue { bits: v, width: WireWidth::Unlimited }
     }
 
+    pub fn from_u64(v: u64) -> WireValue {
+        WireValue { bits: u128::new(v), width: WireWidth::Unlimited }
+    }
+
     pub fn from_binary(s: &str) -> WireValue {
         WireValue {
             bits: u128::from_str_radix(s, 2).unwrap(),
@@ -126,7 +131,10 @@ impl WireValue {
     pub fn is_false(self) -> bool {
         self.bits == u128::new(0)
     }
+}
 
+impl From<u64> for WireValue {
+    fn from(x: u64) -> WireValue { WireValue::new(u128::new(x)) }
 }
 
 #[derive(Debug,Eq,PartialEq,Clone,Copy)]
@@ -311,7 +319,7 @@ impl Expr {
                     if try!(option.condition.evaluate(wires)).is_true() {
                         result = try!(option.value.evaluate(wires));
                         break;
-                    } 
+                    }
                 }
                 Ok(result.as_width(try!(self.width(wires))))
             },

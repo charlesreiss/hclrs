@@ -303,17 +303,20 @@ impl RunningProgram {
         }
     }
 
+    pub fn cycle(&self) -> u32 { self.cycle }
+
     pub fn step(&mut self) -> Result<(), Error> {
         let program = &self.program;
         try!(program.step_in_place(&mut self.values));
+        self.cycle += 1;
         Ok(())
     }
 
     pub fn done(&self) -> bool {
-        unimplemented!();
+        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)) != &WireValue::from_u64(1)
     }
 
-    pub fn dump() -> String {
-        unimplemented!();
+    pub fn dump(&self) -> String {
+        format!("{:?}", self.values)
     }
 }
