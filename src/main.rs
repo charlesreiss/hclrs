@@ -1,15 +1,24 @@
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 extern crate lalrpop_util;
 #[cfg(test)]
 extern crate extprim;
 
 pub mod parser;
 mod ast;
+mod program;
+mod errors;
 
-use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls};
+use std::env;
+use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 #[cfg(test)]
-use ast::{Expr, ConstDecl, WireDecl, WireValue, WireWidth, BinOpCode, UnOpCode, MuxOption};
+use ast::{Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
 #[cfg(test)]
 use extprim::u128::u128;
+#[cfg(test)]
+use program::Program;
 
 fn main() {
     let mut errors = Vec::new();
@@ -150,7 +159,7 @@ fn test_mux() {
 fn test_wiredecls() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_WireDecls(&mut errors, "wire x : 32 , y : 2, z : 1;").unwrap(),
+        parse_WireDecls(&mut errors, "wire x : 32 , y : 2, z : 1").unwrap(),
         vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(32) },
              WireDecl { name: String::from("y"), width: WireWidth::Bits(2) },
              WireDecl { name: String::from("z"), width: WireWidth::Bits(1) })
@@ -158,7 +167,7 @@ fn test_wiredecls() {
     assert_eq!(errors, vec!());
     errors.clear();
     assert_eq!(
-        parse_WireDecls(&mut errors, "wire x : 64;").unwrap(),
+        parse_WireDecls(&mut errors, "wire x : 64").unwrap(),
         vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(64) })
     );
     assert_eq!(errors, vec!());
@@ -168,7 +177,7 @@ fn test_wiredecls() {
 fn test_constdecls() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_ConstDecls(&mut errors, "const x = 0x42, y=0;").unwrap(),
+        parse_ConstDecls(&mut errors, "const x = 0x42, y=0").unwrap(),
         vec!(
             ConstDecl { name: String::from("x"), value: Box::new(
                 Expr::Constant(WireValue::from_hexadecimal("42"))
@@ -228,4 +237,22 @@ fn test_eval_mux() {
         Ok(WireValue { bits: u128::new(43), width: WireWidth::Unlimited })
     );
     // FIXME: more tests
+}
+
+#[test]
+fn test_program() {
+    env_logger::init().unwrap();
+    let mut errors = Vec::new();
+    let statements = parse_Statements(&mut errors,
+        "const x = 42; wire y : 32; wire z : 32;
+         z = [x > 43: 0; x < 43: y << 3; x == 43: 0]; y = x * 2;").unwrap();
+    let program = Program::new(statements).unwrap();
+    let mut values = program.constants();
+    let mut expect_values = WireValues::new();
+    expect_values.insert(String::from("x"), WireValue::from_decimal("42"));
+    assert_eq!(&values, &expect_values);
+    program.step_in_place(&mut values).unwrap();
+    expect_values.insert(String::from("y"), WireValue::from_decimal("84"));
+    expect_values.insert(String::from("z"), WireValue::from_decimal("672"));
+    assert_eq!(&values, &expect_values);
 }

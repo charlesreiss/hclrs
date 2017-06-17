@@ -11,12 +11,8 @@ use std::cmp;
 
 use self::num_traits::cast::ToPrimitive;
 
-#[derive(Debug,Eq,PartialEq)]
-pub enum Error {
-    MismatchedWidths,
-    UndefinedWire(String),
-    // FIXME: multiple errors?
-}
+use errors::Error;
+
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq)]
 pub enum WireWidth {
@@ -253,13 +249,13 @@ impl UnOpCode {
     }
 }
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub struct MuxOption {
     pub condition: Box<Expr>,
     pub value: Box<Expr>,
 }
 
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub enum Expr {
     Constant(WireValue),
     BinOp(BinOpCode, Box<Expr>, Box<Expr>),
@@ -268,10 +264,10 @@ pub enum Expr {
     NamedWire(String),
 }
 
-type WireValues = HashMap<String, WireValue>;
+pub type WireValues = HashMap<String, WireValue>;
 
 impl Expr {
-    pub fn width(&self, wires: &WireValues) -> Result<WireWidth, Error> {
+    pub fn width<'a>(&self, wires: &'a WireValues) -> Result<WireWidth, Error> {
         match *self {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
@@ -296,7 +292,7 @@ impl Expr {
         self.evaluate(&WireValues::new())
     }
 
-    pub fn evaluate(&self, wires: &WireValues) -> Result<WireValue, Error> {
+    pub fn evaluate<'a>(&self, wires: &'a WireValues) -> Result<WireValue, Error> {
         match *self {
             Expr::Constant(value) => Ok(value),
             Expr::BinOp(opcode, ref left, ref right) => {
@@ -326,13 +322,61 @@ impl Expr {
         }
     }
 
-    pub fn referenced_wires() -> HashSet<String> {
-        unimplemented!();
+    fn accumulate_referenced_wires<'a, 'b>(&'a self, set: &'b mut HashSet<&'a str>) {
+        match *self {
+            Expr::Constant(_) => {},
+            Expr::BinOp(_, ref left, ref right) => {
+                left.accumulate_referenced_wires(set);
+                right.accumulate_referenced_wires(set);
+            },
+            Expr::UnOp(_, ref inner) => {
+                inner.accumulate_referenced_wires(set);
+            },
+            Expr::Mux(ref options) => {
+                for ref option in options {
+                    option.condition.accumulate_referenced_wires(set);
+                    option.value.accumulate_referenced_wires(set);
+                }
+            },
+            Expr::NamedWire(ref name) => {
+                set.insert(name.as_str());
+            },
+        }
+    }
+
+    pub fn referenced_wires<'a>(&'a self) -> HashSet<&'a str> {
+        let mut result = HashSet::new();
+        self.accumulate_referenced_wires(&mut result);
+        result
     }
 
     pub fn errors() -> Vec<Error> {
         unimplemented!();
     }
+}
+
+#[test]
+fn test_referenced_wires() {
+    let mut just_foo = HashSet::new();
+    just_foo.insert("foo");
+    let mut foo_and_bar = HashSet::new();
+    foo_and_bar.insert("foo");
+    foo_and_bar.insert("bar");
+    assert_eq!(
+        Expr::NamedWire(String::from("foo")).referenced_wires(),
+        just_foo
+    );
+    assert_eq!(
+        Expr::UnOp(UnOpCode::Negate,
+            Box::new(Expr::NamedWire(String::from("foo")))).referenced_wires(),
+        just_foo
+    );
+    assert_eq!(
+        Expr::BinOp(BinOpCode::Add,
+            Box::new(Expr::NamedWire(String::from("foo"))),
+            Box::new(Expr::NamedWire(String::from("bar")))).referenced_wires(),
+        foo_and_bar
+    );
 }
 
 #[derive(Debug,Eq,PartialEq)]

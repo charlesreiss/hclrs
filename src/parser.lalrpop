@@ -50,7 +50,7 @@ WireDecl : WireDecl = {
 };
 
 pub WireDecls : Vec<WireDecl> = {
-    "wire" <c:Comma<WireDecl>> ";" => c
+    "wire" <c:Comma<WireDecl>> => c
 };
 
 // FIXME: ConstDecls
@@ -60,7 +60,7 @@ ConstDecl : ConstDecl = {
 };
 
 pub ConstDecls : Vec<ConstDecl> = {
-    "const" <c:Comma<ConstDecl>> ";" => c
+    "const" <c:Comma<ConstDecl>> => c
 };
 
 BinOpAddSub : BinOpCode = {
@@ -164,3 +164,5 @@ pub Statement : Statement = {
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
 };
+
+pub Statements : Vec<Statement> = Semicolon<Statement>;
