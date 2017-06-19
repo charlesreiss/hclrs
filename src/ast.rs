@@ -275,21 +275,21 @@ pub enum Expr {
 pub type WireValues = HashMap<String, WireValue>;
 
 impl Expr {
-    pub fn width<'a>(&self, wires: &'a WireValues) -> Result<WireWidth, Error> {
+    pub fn width<'a>(&self, widths: &'a HashMap<&'a str, WireWidth>) -> Result<WireWidth, Error> {
         match *self {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
                 match opcode.kind() {
-                    BinOpKind::EqualWidth => try!(left.width(wires)).combine(try!(right.width(wires))),
+                    BinOpKind::EqualWidth => try!(left.width(widths)).combine(try!(right.width(widths))),
                     BinOpKind::Boolean => Ok(WireWidth::Bits(1)),
                 },
             Expr::Mux(ref options) =>
                 options.iter().fold(Ok(WireWidth::Unlimited),
-                                    |maybe_width, ref item| try!(maybe_width).combine(try!(item.value.width(wires)))),
+                                    |maybe_width, ref item| try!(maybe_width).combine(try!(item.value.width(widths)))),
             Expr::UnOp(UnOpCode::Negate, _) => Ok(WireWidth::Bits(1)),
-            Expr::UnOp(UnOpCode::Complement, ref covered) => covered.width(wires),
-            Expr::NamedWire(ref name) => match wires.get(name) {
-                Some(value) => Ok(value.width),
+            Expr::UnOp(UnOpCode::Complement, ref covered) => covered.width(widths),
+            Expr::NamedWire(ref name) => match widths.get(name.as_str()) {
+                Some(ref width) => Ok(**width),
                 None => Err(Error::UndefinedWire(name.clone())),
             },
             _ => unimplemented!(),
@@ -321,7 +321,8 @@ impl Expr {
                         break;
                     }
                 }
-                Ok(result.as_width(try!(self.width(wires))))
+                // FIXME: do we need to adjust widths here?
+                Ok(result)
             },
             Expr::NamedWire(ref name) => match wires.get(name) {
                 Some(value) => Ok(*value),

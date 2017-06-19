@@ -1,7 +1,8 @@
-use ast::{Assignment, Statement, ConstDecl, WireDecl, WireValue, WireValues, Expr};
+use ast::{Assignment, Statement, ConstDecl, WireDecl, WireWidth, WireValue, WireValues, Expr};
 use errors::Error;
 use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
+use std::collections::btree_map::BTreeMap;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -27,6 +28,10 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         let inverted_for_node = self.edges_inverted.entry(to).or_insert_with(|| HashSet::new());
         (*inverted_for_node).insert(from);
         self.num_edges = self.num_edges + 1;
+    }
+
+    fn contains_node(&self, node: &T) -> bool {
+        return self.nodes.contains(&node);
     }
 
     fn contains(&self, from: T, to: T) -> bool {
@@ -145,10 +150,156 @@ fn test_graph() {
     verify_sort(&graph);
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Eq,Clone)]
 pub enum Action {
-    Assign(String, Box<Expr>),
-    // TODO: fixed functionality
+    // must be done FIRST:
+    ReadRegisterBanks,
+    Assign(String, Box<Expr>, WireWidth),
+    ReadProgramRegister { number: String, out_port: String },
+    ReadMemory { is_read: Option<String>, address: String, out_port: String, bytes: u8 },
+    // these actions MUST be done last:
+    WriteProgramRegister { number: String, in_port: String },
+    WriteMemory { is_write: Option<String>, address: String, in_port: String, bytes: u8 },
+    SetStatus { in_wire: String },
+}
+
+// psuedo-assignment for fixed functionality
+pub struct FixedFunction {
+    in_wires: Vec<WireDecl>,
+    out_wire: Option<String>,
+    action: Action,
+    mandatory: bool,
+    is_last: bool,
+}
+
+impl FixedFunction {
+    fn read_port(number: &str, output: &str) -> FixedFunction {
+        FixedFunction {
+            in_wires: vec!(WireDecl { name: String::from(number), width: WireWidth::Bits(4) }),
+            out_wire: Some(String::from(output)),
+            action: Action::ReadProgramRegister {
+                number: String::from(number),
+                out_port: String::from(output),
+            },
+            mandatory: false,
+            is_last: false,
+        }
+    }
+
+    fn write_port(number: &str, input: &str) -> FixedFunction {
+        FixedFunction {
+            in_wires: vec!(
+                WireDecl {
+                    name: String::from(number),
+                    width: WireWidth::Bits(4),
+                },
+                WireDecl {
+                    name: String::from(input),
+                    width: WireWidth::Bits(64),
+                }
+            ),
+            out_wire: None,
+            action: Action::WriteProgramRegister {
+                number: String::from(number),
+                in_port: String::from(input),
+            },
+            mandatory: false,
+            is_last: true,
+        }
+    }
+}
+
+pub fn y86_fixed_functions() -> Vec<FixedFunction> {
+    return vec!(
+        FixedFunction {
+            in_wires: vec!(WireDecl {
+                name: String::from("Stat"),
+                width: WireWidth::Bits(4),
+            }),
+            out_wire: None,
+            action: Action::SetStatus { in_wire: String::from("Stat") },
+            mandatory: true,
+            is_last: true,
+        },
+        FixedFunction {
+            in_wires: vec!(WireDecl {
+                name: String::from("pc"),
+                width: WireWidth::Bits(64),
+            }),
+            out_wire: Some(String::from("i10bytes")),
+            action: Action::ReadMemory {
+                is_read: None,
+                address: String::from("pc"),
+                out_port: String::from("i10bytes"),
+                bytes: 10
+            },
+            mandatory: true,
+            is_last: false,
+        },
+        FixedFunction {
+            in_wires: vec!(WireDecl {
+                name: String::from("mem_addr"),
+                width: WireWidth::Bits(64),
+            },
+            WireDecl {
+                name: String::from("mem_read"),
+                width: WireWidth::Bits(1),
+            }),
+            out_wire: Some(String::from("mem_output")),
+            action: Action::ReadMemory {
+                is_read: Some(String::from("mem_read")),
+                address: String::from("mem_addr"),
+                out_port: String::from("mem_output"),
+                bytes: 8
+            },
+            mandatory: false,
+            is_last: false,
+        },
+        FixedFunction {
+            // FIXME: some way to indicate that mem_write -> mem_input + mem_addr?
+            in_wires: vec!(
+                WireDecl {
+                    name: String::from("mem_addr"),
+                    width: WireWidth::Bits(64),
+                },
+                WireDecl {
+                    name: String::from("mem_input"),
+                    width: WireWidth::Bits(64),
+                },
+                WireDecl {
+                    name: String::from("mem_write"),
+                    width: WireWidth::Bits(1),
+                }
+            ),
+            out_wire: None,
+            action: Action::WriteMemory {
+                is_write: Some(String::from("mem_write")),
+                address: String::from("mem_addr"),
+                in_port: String::from("mem_input"),
+                bytes: 8,
+            },
+            mandatory: false,
+            is_last: false,
+        },
+        FixedFunction::read_port("reg_srcA", "reg_outputA"),
+        FixedFunction::read_port("reg_srcB", "reg_outputB"),
+        FixedFunction::write_port("reg_dstE", "reg_inputE"),
+        FixedFunction::write_port("reg_dstM", "reg_inputM")
+    )
+}
+
+#[derive(Debug)]
+pub struct RegisterBank {
+    in_signals: Vec<String>,
+    out_signals: Vec<String>,
+    defaults: WireValues, // mapped to out names
+    stall_signal: String,
+    bubble_signal: String,
+}
+
+pub struct RegisterWritePort {
+    number: String,
+    value: String
 }
 
 // interpreter representation of a program
@@ -183,16 +334,93 @@ fn resolve_constants(exprs: &HashMap<&str, &Expr>) -> Result<HashMap<String, Wir
     }
 }
 
-fn assignments_to_actions(
-        assignments: &HashMap<&str, &Expr>,
-        known_values: &HashSet<&str>
+fn assignments_to_actions<'a>(
+        assignments: &'a HashMap<&'a str, &Expr>,
+        widths: &'a HashMap<&'a str, WireWidth>,
+        known_values: &'a HashSet<&'a str>,
+        fixed_functions: &'a Vec<FixedFunction>,
     ) -> Result<Vec<Action>, Error> {
+    let mut fixed_by_output = HashMap::new();
+    let mut fixed_no_output = Vec::new();
     let mut graph = Graph::new();
     for (name, expr) in assignments {
         for in_name in expr.referenced_wires() {
             if !known_values.contains(in_name) {
+                if !assignments.contains_key(in_name) {
+                    return Err(Error::UndefinedWire(String::from(in_name)));
+                }
                 graph.insert(in_name, name);
             }
+        }
+    }
+
+    let mut unused_fixed_inputs = HashSet::new();
+    let mut used_fixed_inputs = HashSet::new();
+    for fixed in fixed_functions.iter() {
+        let mut missing_inputs: Vec<String> = Vec::new();
+        for in_name in &fixed.in_wires {
+            if known_values.contains(in_name.name.as_str()) {
+                return Err(Error::RedefinedBuiltinWire(in_name.name.clone()));
+            }
+            if !assignments.contains_key(in_name.name.as_str()) {
+                missing_inputs.push(in_name.name.clone());
+            }
+        }
+        if fixed.mandatory && missing_inputs.len() > 0 {
+            let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(x.clone())).collect();
+            return Err(Error::MultipleErrors(missing_list));
+        } else if missing_inputs.len() > 0 {
+            if let Some(ref name) = fixed.out_wire {
+                if graph.contains_node(&name.as_str()) {
+                    let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(x.clone())).collect();
+                    return Err(Error::MultipleErrors(missing_list));
+                }
+            }
+            if missing_inputs.len() != fixed.in_wires.len() {
+                for in_name in &fixed.in_wires {
+                    if assignments.contains_key(in_name.name.as_str()) {
+                        unused_fixed_inputs.insert(in_name.name.as_str());
+                    }
+                }
+            }
+            continue;
+        }
+        match fixed.out_wire {
+            None => {
+                fixed_no_output.push(fixed);
+            },
+            Some(ref name) => {
+                if known_values.contains(name.as_str()) ||
+                   assignments.contains_key(name.as_str()) {
+                    return Err(Error::RedefinedBuiltinWire(name.clone()));
+                }
+                fixed_by_output.insert(name.as_str(), fixed);
+                for in_name in &fixed.in_wires {
+                    used_fixed_inputs.insert(in_name.name.as_str());
+                    graph.insert(in_name.name.as_str(), name.as_str());
+                }
+            }
+        }
+    }
+
+    // if any piece of fixed functionality was not created because some but not all of its
+    // inputs exist, trigger an error unless all those inputs are used by other fixed
+    // functionality.
+
+    // this makes doing something like setting reg_dstE without setting reg_inputE an error,
+    // but doesn't make something like setting mem_addr without
+    {
+        let mut missing_inputs = Vec::new();
+        for name in unused_fixed_inputs {
+            if !used_fixed_inputs.contains(name) {
+                missing_inputs.push(name);
+            }
+        }
+
+        if missing_inputs.len() > 0 {
+            let missing_list = missing_inputs.iter().map(
+                |x| Error::UnsetWire(String::from(*x))).collect();
+            return Err(Error::MultipleErrors(missing_list));
         }
     }
 
@@ -201,33 +429,60 @@ fn assignments_to_actions(
     if let Ok(sorted) = graph.topological_sort() {
         let mut covered = known_values.clone();
         for name in sorted {
-            let expr = assignments.get(name).unwrap();
-            for in_name in expr.referenced_wires() {
-                if !covered.contains(&in_name) {
-                    if !assignments.contains_key(&in_name) {
-                        return Err(Error::UndefinedWire(String::from(in_name)));
+            match assignments.get(name) {
+                Some(expr) => {
+                    for in_name in expr.referenced_wires() {
+                        assert!(covered.contains(&in_name));
                     }
+                    if let Some(the_width) = widths.get(&name) {
+                        try!(try!(expr.width(widths)).combine(*the_width));
+                        result.push(Action::Assign(
+                            String::from(name),
+                            Box::new((*expr).clone()),
+                            *the_width,
+                        ));
+                    } else {
+                        return Err(Error::UndefinedWire(String::from(name)));
+                    }
+                },
+                None => {
+                    let fixed = fixed_by_output.get(name).unwrap();
+                    for in_name in &fixed.in_wires {
+                        assert!(covered.contains(in_name.name.as_str()));
+                    }
+                    result.push(fixed.action.clone());
                 }
             }
-            result.push(Action::Assign(String::from(name), Box::new((*expr).clone())));
             covered.insert(name);
         }
     } else {
         unimplemented!();
     }
 
+
     return Ok(result);
 }
 
 impl Program {
+    pub fn new_y86(statements: Vec<Statement>) -> Result<Program, Error> {
+        Program::new(statements, y86_fixed_functions())
+    }
+
     pub fn new(
         statements: Vec<Statement>,
-        // TODO: parameterized fixed functionality/preamble
+        fixed_functions: Vec<FixedFunction>
+        // TODO: preamble (constants)
     ) -> Result<Program, Error> {
         // Step 1: Split statements into constant declarations, wire declarations, assignments
         let mut constants_raw: HashMap<&str, &Expr> = HashMap::new();
         let mut wires = HashMap::new();
+        let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
+        for fixed in &fixed_functions {
+            for ref in_wire in &fixed.in_wires {
+                wires.insert(in_wire.name.as_str(), in_wire.width);
+            }
+        }
         for statement in &statements {
             match *statement {
                 Statement::ConstDecls(ref decls) => {
@@ -238,13 +493,21 @@ impl Program {
                 Statement::WireDecls(ref decls) => {
                     for ref decl in decls {
                         wires.insert(decl.name.as_str(), decl.width);
+                        needed_wires.insert(decl.name.as_str());
                     }
                 },
                 Statement::Assignment(ref assign) => {
                     for name in &assign.names {
+                        // FIXME: detect multiple declarations
                         assignments.insert(name.as_str(), &*assign.value);
                     }
                 }
+            }
+        }
+
+        for name in needed_wires {
+            if !assignments.contains_key(name) {
+                return Err(Error::UnsetWire(String::from(name)));
             }
         }
 
@@ -259,8 +522,13 @@ impl Program {
         let mut known_values = HashSet::new();
         for key in constants_raw.keys() {
             known_values.insert(*key);
+            wires.insert(*key, constants.get(&String::from(*key)).unwrap().width);
         }
-        let actions = try!(assignments_to_actions(&assignments, &known_values));
+
+        // TODO: add register banks as known values
+        let actions = try!(assignments_to_actions(&assignments, &wires,
+                                                  &known_values, &fixed_functions));
+
         Ok(Program {
             constants: constants,
             actions: actions,
@@ -271,14 +539,26 @@ impl Program {
         self.constants.clone()
     }
 
+    pub fn initial_state(&self) -> WireValues {
+        unimplemented!();
+        // constants, plus initial register bank values
+    }
+
     pub fn step_in_place(&self, values: &mut WireValues) -> Result<(), Error> {
         for action in &self.actions {
             match action {
-               &Action::Assign(ref name, ref expr) => {
-                  let result = try!(expr.evaluate(values));
-                  // FIXME: avoid creating new string for speed?
-                  values.insert(name.clone(), result);
-               }
+               &Action::Assign(ref name, ref expr, ref width) => {
+                  let result = try!(expr.evaluate(values)).as_width(*width);
+                  let mut inserted = false;
+                  if let Some(value) = values.get_mut(name) {
+                      *value = result;
+                      inserted = true;
+                  }
+                  if !inserted {
+                      values.insert(name.clone(), result);
+                  }
+               },
+               _ => unimplemented!(),
             }
         }
 
@@ -287,23 +567,56 @@ impl Program {
 }
 
 #[derive(Debug)]
+pub struct Memory {
+    data: BTreeMap<u64, u8>
+}
+
+impl Memory {
+    pub fn new() -> Memory {
+        Memory { data: BTreeMap::new() }
+    }
+}
+
+#[derive(Debug)]
 pub struct RunningProgram {
     program: Program,
     cycle: u32,
     values: WireValues,
+    memory: Memory,
+    registers: Vec<u64>,
+    zero_register: usize,
 }
 
 impl RunningProgram {
-    pub fn new(program: Program) -> RunningProgram {
+    pub fn new(program: Program,
+               num_registers: usize,
+               zero_register: usize) -> RunningProgram {
         let constants = program.constants();
+        let mut registers = Vec::new();
+        for i in 0..num_registers {
+            registers.push(0);
+        }
         RunningProgram {
             program: program,
             cycle: 0,
             values: constants,
+            memory: Memory::new(),
+            registers: registers,
+            zero_register: zero_register,
         }
     }
 
+    pub fn new_y86(program: Program) -> RunningProgram {
+        RunningProgram::new(
+            program,
+            16,
+            15
+        )
+    }
+
     pub fn cycle(&self) -> u32 { self.cycle }
+
+    pub fn values(&self) -> &WireValues { &self.values }
 
     pub fn step(&mut self) -> Result<(), Error> {
         let program = &self.program;

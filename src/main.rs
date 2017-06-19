@@ -54,8 +54,8 @@ fn main_real() -> Result<(), Error> {
     let mut errors = Vec::new();
     let statements = parse_Statements(&mut errors, contents.as_str()).unwrap();
 
-    let program = Program::new(statements)?;
-    let mut running_program = RunningProgram::new(program);
+    let program = Program::new_y86(statements)?;
+    let mut running_program = RunningProgram::new_y86(program);
 
     while !running_program.done() && running_program.cycle() < 100 {
         try!(running_program.step());
@@ -262,13 +262,13 @@ fn test_program() {
     let statements = parse_Statements(&mut errors,
         "const x = 42; wire y : 32; wire z : 32;
          z = [x > 43: 0; x < 43: y << 3; x == 43: 0]; y = x * 2;").unwrap();
-    let program = Program::new(statements).unwrap();
-    let mut values = program.constants();
+    let program = Program::new(statements, vec!()).unwrap();
+    let mut running_program = RunningProgram::new(program, 0, 0);
     let mut expect_values = WireValues::new();
     expect_values.insert(String::from("x"), WireValue::from_decimal("42"));
-    assert_eq!(&values, &expect_values);
-    program.step_in_place(&mut values).unwrap();
-    expect_values.insert(String::from("y"), WireValue::from_decimal("84"));
-    expect_values.insert(String::from("z"), WireValue::from_decimal("672"));
-    assert_eq!(&values, &expect_values);
+    assert_eq!(running_program.values(), &expect_values);
+    running_program.step().unwrap();
+    expect_values.insert(String::from("y"), WireValue::from_decimal("84").as_width(WireWidth::from(32)));
+    expect_values.insert(String::from("z"), WireValue::from_decimal("672").as_width(WireWidth::from(32)));
+    assert_eq!(running_program.values(), &expect_values);
 }
