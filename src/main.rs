@@ -127,7 +127,7 @@ fn test_unops() {
         Box::new(Expr::UnOp(UnOpCode::Complement,
             Box::new(Expr::Constant(WireValue::from_decimal("42")))))
     );
-    assert_eq!(errors, vec!());
+    assert_eq!(errors.len(), 0);
 }
 
 #[test]
@@ -136,15 +136,15 @@ fn test_mux() {
     assert_eq!(
         parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap(),
         Box::new(Expr::Mux(vec!(
-            MuxOption { 
+            MuxOption {
                 condition: Box::new(Expr::Constant(WireValue::from_decimal("0"))),
                 value: Box::new(Expr::Constant(WireValue::from_decimal("42"))),
             },
-            MuxOption { 
+            MuxOption {
                 condition: Box::new(Expr::Constant(WireValue::from_hexadecimal("42"))),
                 value: Box::new(Expr::Constant(WireValue::from_decimal("43"))),
             },
-            MuxOption { 
+            MuxOption {
                 condition: Box::new(Expr::Constant(WireValue::from_decimal("1"))),
                 value: Box::new(Expr::Constant(WireValue::from_decimal("44"))),
             }
@@ -153,21 +153,21 @@ fn test_mux() {
     assert_eq!(
         parse_Expr(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44 ]").unwrap(),
         Box::new(Expr::Mux(vec!(
-            MuxOption { 
+            MuxOption {
                 condition: Box::new(Expr::Constant(WireValue::from_decimal("0"))),
                 value: Box::new(Expr::Constant(WireValue::from_decimal("42"))),
             },
-            MuxOption { 
+            MuxOption {
                 condition: Box::new(Expr::Constant(WireValue::from_hexadecimal("42"))),
                 value: Box::new(Expr::Constant(WireValue::from_decimal("43"))),
             },
-            MuxOption { 
+            MuxOption {
                 condition: Box::new(Expr::Constant(WireValue::from_decimal("1"))),
                 value: Box::new(Expr::Constant(WireValue::from_decimal("44"))),
             }
         )))
     );
-    assert_eq!(errors, vec!());
+    assert_eq!(errors.len(), 0);
 }
 
 
@@ -180,13 +180,13 @@ fn test_wiredecls() {
              WireDecl { name: String::from("y"), width: WireWidth::Bits(2) },
              WireDecl { name: String::from("z"), width: WireWidth::Bits(1) })
     );
-    assert_eq!(errors, vec!());
+    assert_eq!(errors.len(), 0);
     errors.clear();
     assert_eq!(
         parse_WireDecls(&mut errors, "wire x : 64").unwrap(),
         vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(64) })
     );
-    assert_eq!(errors, vec!());
+    assert_eq!(errors.len(), 0);
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn test_constdecls() {
             ) }
         )
     );
-    assert_eq!(errors, vec!());
+    assert_eq!(errors.len(), 0);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn test_eval_unops() {
         parse_Expr(&mut errors, "~42").unwrap().evaluate_constant().unwrap(),
         WireValue { bits: !u128::new(42), width: WireWidth::Unlimited }
     );
-    assert_eq!(errors, vec!());
+    assert_eq!(errors.len(), 0);
 }
 
 #[test]

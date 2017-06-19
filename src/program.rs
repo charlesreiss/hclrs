@@ -501,7 +501,8 @@ impl Program {
                         // FIXME: detect multiple declarations
                         assignments.insert(name.as_str(), &*assign.value);
                     }
-                }
+                },
+                _ => unimplemented!(),
             }
         }
 

@@ -394,10 +394,23 @@ pub struct Assignment {
     pub value: Box<Expr>,
 }
 
+#[derive(Debug,Eq,PartialEq)]
+pub struct RegisterDecl {
+    pub name: String,
+    pub width: WireWidth,
+    pub default: Box<Expr>,
+}
+
+#[derive(Debug,Eq,PartialEq)]
+pub struct RegisterBankDecl {
+    pub name: String,
+    pub registers: Vec<RegisterDecl>,
+}
 
 #[derive(Debug,Eq,PartialEq)]
 pub enum Statement {
     ConstDecls(Vec<ConstDecl>),
     WireDecls(Vec<WireDecl>),
     Assignment(Assignment),
+    RegisterBankDecl(RegisterBankDecl),
 }

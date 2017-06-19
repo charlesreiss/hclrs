@@ -1,9 +1,10 @@
 use std::str::FromStr;
-use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, Statement};
-use lalrpop_util::ErrorRecovery;
+use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement};
+use errors::Error;
+use lalrpop_util::{ErrorRecovery, ParseError};
 
 // ErrorRecovery< locationType, tokenType, errorType >
-grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
+grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), Error>>);
 
 match {
     "&&", // over &
@@ -15,6 +16,7 @@ match {
     "!=", // over !
     "wire",
     "const",
+    "register",
     r"0b[01]+" => BIN,
     r"0x[0-9a-fA-F]+" => HEX,
     r"0o[0-7]+" => OCT,
@@ -40,13 +42,34 @@ Comma<T>: Vec<T> = Repeat<",", T>;
 
 Semicolon<T>: Vec<T> = Repeat<";", T>;
 
-WireDecl : WireDecl = {
-    <name:ID> ":" <w:DEC> => match WireWidth::from_str(w) {
-        Ok(width) => WireDecl { name: String::from(name), width: width },
+WidthConstant : WireWidth = {
+    <w:DEC> =>? match WireWidth::from_str(w) {
+        Ok(width) => Ok(width),
         Err(_) => {
-            panic!() /* FIXME */
-        }
-    }
+            errors.push(ErrorRecovery {
+                error: ParseError::User { error: Error::InvalidWireWidth(String::from(w)) },
+                dropped_tokens: vec!(),
+            });
+            // Custom lexer to allow this to work?
+            Err(ParseError::User { error: () })
+        },
+    },
+    <w:HEX> =>? match WireWidth::from_str(w) {
+        Ok(width) => Ok(width),
+        Err(_) => {
+            errors.push(ErrorRecovery {
+                error: ParseError::User { error: Error::InvalidWireWidth(String::from(w)) },
+                dropped_tokens: vec!(),
+            });
+            // Custom lexer to allow this to work?
+            Err(ParseError::User { error: () })
+        },
+    },
+};
+
+WireDecl : WireDecl = {
+    <name:ID> ":" <width:WidthConstant> =>
+        WireDecl { name: String::from(name), width: width },
 };
 
 pub WireDecls : Vec<WireDecl> = {
@@ -159,10 +182,77 @@ Assignment : Assignment = {
     }
 };
 
-pub Statement : Statement = {
+RegisterDecl : RegisterDecl = {
+    <n:ID> ":" <w:WidthConstant> "=" <e:Expr> => {
+        RegisterDecl { name: String::from(n), width: w, default: e }
+    },
+};
+
+RegisterBankDecl : RegisterBankDecl = {
+    "register" <i:ID> "{" <r:Semicolon<RegisterDecl>> "}" => {
+        RegisterBankDecl {
+            name: String::from(i),
+            registers: r,
+        }
+    }
+};
+
+
+StatementNeedSemi : Statement = {
     Assignment => Statement::Assignment(<>),
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
 };
 
-pub Statements : Vec<Statement> = Semicolon<Statement>;
+StatementNoSemi : Statement = {
+    RegisterBankDecl => Statement::RegisterBankDecl(<>),
+};
+
+pub Statement : Statement = {
+    <s:StatementNeedSemi> => s,
+    <s:StatementNoSemi> => s,
+};
+
+StatementSemicolon : Statement = {
+    <s:StatementNeedSemi> ";" => s,
+    <s:StatementNoSemi> => s,
+};
+
+// Require semicolons between assignments and wire and const declarations, but not
+// after register bank declaration
+StatementsNotEof : Vec<Statement> = {
+    <e:StatementNeedSemi> ";" => {
+        let mut v = Vec::new();
+        v.push(e);
+        v
+    },
+    <e:StatementNoSemi> => {
+        let mut v = Vec::new();
+        v.push(e);
+        v
+    },
+    <v:StatementsNotEof> ";" => v,
+    <v:StatementsNotEof> <e:StatementNeedSemi> ";" => {
+        let mut v = v;
+        v.push(e);
+        v
+    },
+    <v:StatementsNotEof> <e:StatementNoSemi> => {
+        let mut v = v;
+        v.push(e);
+        v
+    },
+};
+
+pub Statements : Vec<Statement> = {
+    <v:StatementsNotEof> <e:StatementNeedSemi?> => {
+        match e {
+            None => v,
+            Some(e) => {
+                let mut v = v;
+                v.push(e);
+                v
+            }
+        }
+    }
+};
