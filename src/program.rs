@@ -307,7 +307,7 @@ pub struct RegisterWritePort {
 pub struct Program {
     constants: WireValues,
     actions: Vec<Action>,  // in topological order
-    // FIXME: register banks
+    register_banks: Vec<RegisterBank>,
 }
 
 
@@ -478,6 +478,7 @@ impl Program {
         let mut wires = HashMap::new();
         let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
+        let mut register_banks_raw = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
                 wires.insert(in_wire.name.as_str(), in_wire.width);
@@ -502,6 +503,9 @@ impl Program {
                         assignments.insert(name.as_str(), &*assign.value);
                     }
                 },
+                Statement::RegisterBankDecl(ref decl) => {
+                    register_banks_raw.push(decl);
+                }
                 _ => unimplemented!(),
             }
         }
@@ -519,7 +523,55 @@ impl Program {
         // Step 2: find constants values
         let constants = try!(resolve_constants(&constants_raw));
 
-        // Step 3: order remaining assignments
+        // Step 3: resolve register banks
+        let mut register_banks = Vec::new();
+
+        for decl in &register_banks_raw {
+            // FIXME: should really iterate over graphemes
+            let name_chars: Vec<char> = decl.name.chars().collect();
+            if name_chars.len() != 2 {
+                return Err(Error::InvalidRegisterBankName(decl.name.clone()));
+            }
+            let in_prefix = name_chars[0];
+            let out_prefix = name_chars[1];
+            if !in_prefix.is_lowercase() || !out_prefix.is_uppercase() {
+                return Err(Error::InvalidRegisterBankName(decl.name.clone()));
+            }
+            let mut in_signals = Vec::new();
+            let mut out_signals = Vec::new();
+            let mut defaults = HashMap::new();
+            let mut stall_signal = String::from("stall_");
+            stall_signal.push(out_prefix);
+            let mut bubble_signal = String::from("bubble_");
+            bubble_signal.push(out_prefix);
+            for register in &decl.registers {
+                let mut in_name = String::new();
+                let mut out_name = String::new();
+                in_name.push(in_prefix);
+                out_name.push(out_prefix);
+                in_name.push('_');
+                out_name.push('_');
+                in_name.push_str(register.name.as_str());
+                out_name.push_str(register.name.as_str());
+                // FIXME: better errors if failure here
+                let value = register.default.evaluate(&constants)?;
+                // FIXME: better error
+                value.width.combine(register.width)?;
+                // do this before moving out_name to out_signals
+                defaults.insert(out_name.clone(), value.as_width(register.width));
+                in_signals.push(in_name);
+                out_signals.push(out_name);
+            }
+            register_banks.push(RegisterBank {
+                in_signals: in_signals,
+                out_signals: out_signals,
+                defaults: defaults,
+                stall_signal: stall_signal,
+                bubble_signal: bubble_signal,
+            });
+        }
+
+        // Step 4: order remaining assignments
         let mut known_values = HashSet::new();
         for key in constants_raw.keys() {
             known_values.insert(*key);
@@ -533,6 +585,7 @@ impl Program {
         Ok(Program {
             constants: constants,
             actions: actions,
+            register_banks: register_banks,
         })
     }
 
