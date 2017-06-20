@@ -458,6 +458,9 @@ fn assignments_to_actions<'a>(
         unimplemented!();
     }
 
+    for fixed in &fixed_no_output {
+        result.push(fixed.action.clone());
+    }
 
     return Ok(result);
 }
