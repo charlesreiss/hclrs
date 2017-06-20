@@ -152,8 +152,8 @@ fn test_graph() {
 
 #[derive(Debug,PartialEq,Eq,Clone)]
 pub enum Action {
-    // must be done FIRST:
-    ReadRegisterBanks,
+    // not included:
+        // register bank processing (done at beginning of cycle)
     Assign(String, Box<Expr>, WireWidth),
     ReadProgramRegister { number: String, out_port: String },
     ReadMemory { is_read: Option<String>, address: String, out_port: String, bytes: u8 },
@@ -290,8 +290,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
 
 #[derive(Debug)]
 pub struct RegisterBank {
-    in_signals: Vec<String>,
-    out_signals: Vec<String>,
+    signals: Vec<(String, String)>, // in, out
     defaults: WireValues, // mapped to out names
     stall_signal: String,
     bubble_signal: String,
@@ -336,7 +335,7 @@ fn resolve_constants(exprs: &HashMap<&str, &Expr>) -> Result<HashMap<String, Wir
 
 fn assignments_to_actions<'a>(
         assignments: &'a HashMap<&'a str, &Expr>,
-        widths: &'a HashMap<&'a str, WireWidth>,
+        widths: &'a HashMap<String, WireWidth>,
         known_values: &'a HashSet<&'a str>,
         fixed_functions: &'a Vec<FixedFunction>,
     ) -> Result<Vec<Action>, Error> {
@@ -434,7 +433,7 @@ fn assignments_to_actions<'a>(
                     for in_name in expr.referenced_wires() {
                         assert!(covered.contains(&in_name));
                     }
-                    if let Some(the_width) = widths.get(&name) {
+                    if let Some(the_width) = widths.get(name) {
                         try!(try!(expr.width(widths)).combine(*the_width));
                         result.push(Action::Assign(
                             String::from(name),
@@ -481,9 +480,10 @@ impl Program {
         let mut register_banks_raw = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
-                wires.insert(in_wire.name.as_str(), in_wire.width);
+                wires.insert(in_wire.name.clone(), in_wire.width);
             }
         }
+        // FIXME: detect duplicates somewhere here
         for statement in &statements {
             match *statement {
                 Statement::ConstDecls(ref decls) => {
@@ -493,8 +493,8 @@ impl Program {
                 },
                 Statement::WireDecls(ref decls) => {
                     for ref decl in decls {
-                        wires.insert(decl.name.as_str(), decl.width);
-                        needed_wires.insert(decl.name.as_str());
+                        wires.insert(decl.name.clone(), decl.width);
+                        needed_wires.insert(decl.name.clone());
                     }
                 },
                 Statement::Assignment(ref assign) => {
@@ -507,12 +507,6 @@ impl Program {
                     register_banks_raw.push(decl);
                 }
                 _ => unimplemented!(),
-            }
-        }
-
-        for name in needed_wires {
-            if !assignments.contains_key(name) {
-                return Err(Error::UnsetWire(String::from(name)));
             }
         }
 
@@ -537,8 +531,7 @@ impl Program {
             if !in_prefix.is_lowercase() || !out_prefix.is_uppercase() {
                 return Err(Error::InvalidRegisterBankName(decl.name.clone()));
             }
-            let mut in_signals = Vec::new();
-            let mut out_signals = Vec::new();
+            let mut signals = Vec::new();
             let mut defaults = HashMap::new();
             let mut stall_signal = String::from("stall_");
             stall_signal.push(out_prefix);
@@ -559,23 +552,34 @@ impl Program {
                 value.width.combine(register.width)?;
                 // do this before moving out_name to out_signals
                 defaults.insert(out_name.clone(), value.as_width(register.width));
-                in_signals.push(in_name);
-                out_signals.push(out_name);
+                wires.insert(out_name.clone(), register.width);
+                wires.insert(in_name.clone(), register.width);
+                needed_wires.insert(in_name.clone());
+                signals.push((in_name, out_name));
             }
+            wires.insert(stall_signal.clone(), WireWidth::Bits(1));
+            wires.insert(bubble_signal.clone(), WireWidth::Bits(1));
+            // FIXME: detect redefinition of signals
             register_banks.push(RegisterBank {
-                in_signals: in_signals,
-                out_signals: out_signals,
+                signals: signals,
                 defaults: defaults,
                 stall_signal: stall_signal,
                 bubble_signal: bubble_signal,
             });
         }
 
-        // Step 4: order remaining assignments
+        // Step 4: Check for missing wires
+        for name in needed_wires {
+            if !assignments.contains_key(name.as_str()) {
+                return Err(Error::UnsetWire(name));
+            }
+        }
+
+        // Step 5: order remaining assignments
         let mut known_values = HashSet::new();
         for key in constants_raw.keys() {
             known_values.insert(*key);
-            wires.insert(*key, constants.get(&String::from(*key)).unwrap().width);
+            wires.insert(String::from(*key), constants.get(&String::from(*key)).unwrap().width);
         }
 
         // TODO: add register banks as known values
@@ -594,11 +598,40 @@ impl Program {
     }
 
     pub fn initial_state(&self) -> WireValues {
-        unimplemented!();
-        // constants, plus initial register bank values
+        let mut values = self.constants();
+        for bank in &self.register_banks {
+           // bubble initially to set register bank values?
+           values.insert(bank.stall_signal.clone(), WireValue::false_value());
+           values.insert(bank.bubble_signal.clone(), WireValue::true_value());
+        }
+        values
     }
 
     pub fn step_in_place(&self, values: &mut WireValues) -> Result<(), Error> {
+        for bank in &self.register_banks {
+            let stalled = values.get(&bank.stall_signal).unwrap().is_true();
+            let bubbled = {
+                let ref_bubble = values.get_mut(&bank.bubble_signal).unwrap();
+                let old_bubble = ref_bubble.is_true();
+                // we set the initial values of register banks by bubbling in cycle 0;
+                // undo this for later cycles in case there's no assignment to do so
+                *ref_bubble = WireValue::false_value();
+                old_bubble
+            };
+            // FIXME: correct stall + bubble behavior
+            if bubbled {
+                for (k, v) in &bank.defaults {
+                    *values.get_mut(k).unwrap() = *v;
+                }
+            } else if !stalled {
+                for signal in &bank.signals {
+                    let in_name = &signal.0;
+                    let out_name = &signal.1;
+                    let new_value = *values.get(in_name).unwrap();
+                    *values.get_mut(out_name).unwrap() = new_value;
+                }
+            }
+        }
         for action in &self.actions {
             match action {
                &Action::Assign(ref name, ref expr, ref width) => {
@@ -645,7 +678,7 @@ impl RunningProgram {
     pub fn new(program: Program,
                num_registers: usize,
                zero_register: usize) -> RunningProgram {
-        let constants = program.constants();
+        let values = program.initial_state();
         let mut registers = Vec::new();
         for i in 0..num_registers {
             registers.push(0);
@@ -653,7 +686,7 @@ impl RunningProgram {
         RunningProgram {
             program: program,
             cycle: 0,
-            values: constants,
+            values: values,
             memory: Memory::new(),
             registers: registers,
             zero_register: zero_register,
