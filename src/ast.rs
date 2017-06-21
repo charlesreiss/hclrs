@@ -73,6 +73,7 @@ impl WireWidth {
     pub fn mask(self) -> u128 {
         match self {
             WireWidth::Unlimited => !u128::new(0),
+            WireWidth::Bits(0) => u128::new(0),
             WireWidth::Bits(s) => ((!u128::new(0)) >> (128 - s)),
         }
     }
