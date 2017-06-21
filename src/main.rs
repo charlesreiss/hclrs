@@ -20,7 +20,7 @@ use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 use ast::{Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
 #[cfg(test)]
 use extprim::u128::u128;
-use program::{Program, RunningProgram};
+use program::{Program, RunningProgram, Memory};
 
 #[cfg(test)]
 use std::sync::{Once, ONCE_INIT};
@@ -295,7 +295,6 @@ fn test_program_registers() {
          x_a = Y_a + 1;").unwrap();
     let program = Program::new(statements, vec!()).unwrap();
     let mut running_program = RunningProgram::new(program, 0, 0);
-    let mut expect_values = WireValues::new();
     assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
     assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
     running_program.step().unwrap();
@@ -304,4 +303,56 @@ fn test_program_registers() {
     running_program.step().unwrap();
     assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
     assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
+}
+
+#[test]
+fn test_memory() {
+    init_test_logger();
+    let mut memory = Memory::new();
+    assert_eq!(
+        memory.read(0, 8),
+        WireValue { bits: u128::new(0), width: WireWidth::Bits(64) }
+    );
+    assert_eq!(
+        memory.read(1, 8),
+        WireValue { bits: u128::new(0), width: WireWidth::Bits(64) }
+    );
+    assert_eq!(
+        memory.read(9, 4),
+        WireValue { bits: u128::new(0), width: WireWidth::Bits(32) }
+    );
+    memory.write(1, u128::new(0x0123456789ABCDEF), 64);
+    assert_eq!(
+        memory.read(5, 4),
+        WireValue { bits: u128::new(0x01234567), width: WireWidth::Bits(32) }
+    );
+    assert_eq!(
+        memory.read(3, 2),
+        WireValue { bits: u128::new(0x89AB), width: WireWidth::Bits(16) }
+    );
+}
+
+#[test]
+fn test_memory_program() {
+    init_test_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements(&mut errors,
+        "register xX { count: 64 = 1; }
+        mem_read = X_count & 1 == 1;
+        mem_write = !mem_read;
+        mem_addr = 0x8 + X_count;
+        mem_input = 0x0123456789ABCDEF;
+        x_count = X_count + 1;
+        pc = 0; Stat = 1;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    assert_eq!(running_program.values().get("X_count"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(64))));
+    assert_eq!(running_program.values().get("x_count"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(64))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("mem_output"), Some(&WireValue::from_decimal("0").as_width(WireWidth::from(64))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("mem_output"), Some(&WireValue::from_decimal("0").as_width(WireWidth::from(64))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("mem_output"), Some(&WireValue::from_hexadecimal("000123456789ABCD").as_width(WireWidth::from(64))));
 }

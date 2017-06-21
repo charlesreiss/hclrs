@@ -149,6 +149,7 @@ ExprMulDiv = BinTier<BinOpMulDiv, Term>;
 UnOp : UnOpCode = {
     "-" => UnOpCode::Negate,
     "~" => UnOpCode::Complement,
+    "!" => UnOpCode::Not,
 };
 
 MuxOption : MuxOption = {

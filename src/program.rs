@@ -1,4 +1,5 @@
 use ast::{Assignment, Statement, ConstDecl, WireDecl, WireWidth, WireValue, WireValues, Expr};
+use extprim::u128::u128;
 use errors::Error;
 use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
@@ -437,7 +438,7 @@ fn assignments_to_actions<'a>(
                         assert!(covered.contains(&in_name));
                     }
                     if let Some(the_width) = widths.get(name) {
-                        try!(try!(expr.width(widths)).combine(*the_width));
+                        expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
                         result.push(Action::Assign(
                             String::from(name),
                             Box::new((*expr).clone()),
@@ -554,7 +555,15 @@ impl Program {
                 // FIXME: better errors if failure here
                 let value = register.default.evaluate(&constants)?;
                 // FIXME: better error
-                value.width.combine(register.width)?;
+                if None == value.width.combine(register.width) {
+                    // FIXME: accumulate errors?
+                    return Err(Error::MismatchedRegisterDefaultWidths(
+                        decl.name.clone(),
+                        register.name.clone(),
+                        (*register.default).clone(),
+                    ));
+
+                }
                 defaults.insert(out_name.clone(), value.as_width(register.width));
                 debug!("Generated wires {} and {} for register", in_name, out_name);
                 signals.push((in_name, out_name, register.width));
@@ -574,7 +583,7 @@ impl Program {
             // move wires and needed_wires so they are dropped before register_banks
             let mut wires = wires;
             let mut needed_wires = needed_wires;
-            
+
             // track widths, values we do/don't need assignment statements for
             let mut known_values = HashSet::new();
             for bank in register_banks {
@@ -657,30 +666,6 @@ impl Program {
         }
         Ok(())
     }
-
-    pub fn step_in_place(&self, values: &mut WireValues) -> Result<(), Error> {
-        self.process_register_banks(values)?;
-        for action in &self.actions {
-            debug!("processing action {:?}", action);
-            match action {
-               &Action::Assign(ref name, ref expr, ref width) => {
-                  let result = try!(expr.evaluate(values)).as_width(*width);
-                  debug!("computed value {:?}", result);
-                  let mut inserted = false;
-                  if let Some(value) = values.get_mut(name) {
-                      *value = result;
-                      inserted = true;
-                  }
-                  if !inserted {
-                      values.insert(name.clone(), result);
-                  }
-               },
-               _ => unimplemented!(),
-            }
-        }
-
-        Ok(())
-    }
 }
 
 #[derive(Debug)]
@@ -692,6 +677,39 @@ impl Memory {
     pub fn new() -> Memory {
         Memory { data: BTreeMap::new() }
     }
+
+    pub fn read(&self, address: u64, bytes: u8) -> WireValue {
+        assert!(bytes <= 16);
+        let mut result = u128::new(0);
+        let mut remaining = bytes;
+        let total = remaining;
+        let mut cur_addr = address;
+        debug!("reading {:#x} ({:?} bytes)", address, bytes);
+        while remaining > 0 {
+            result |= u128::new(*self.data.get(&cur_addr).unwrap_or(&0) as u64) << ((total - remaining) * 8);
+            debug!("reading {:#x}; accumulated result is {:#x}", cur_addr, result);
+            cur_addr += 1;
+            remaining -= 1;
+        }
+        WireValue { bits: result, width: WireWidth::Bits(bytes * 8) }
+    }
+
+    pub fn write(&mut self, address: u64, value: u128, bytes: u8) {
+        assert!(bytes <= 16);
+        let mut remaining = bytes;
+        let total = remaining;
+        let mut cur_addr = address;
+        debug!("write {:#x} ({:?} bytes) into {:#x}", value, bytes, address);
+        while remaining > 0 {
+            let to_write = (value >> ((total - remaining) * 8)).low64() as u8;
+            debug!("writing {:#x} into {:#x}", to_write, cur_addr);
+            self.data.insert(cur_addr, to_write);
+            cur_addr += 1;
+            remaining -= 1;
+        }
+    }
+
+    // FIXME: iteration for output
 }
 
 #[derive(Debug)]
@@ -702,6 +720,7 @@ pub struct RunningProgram {
     memory: Memory,
     registers: Vec<u64>,
     zero_register: usize,
+    last_status: Option<u8>,
 }
 
 impl RunningProgram {
@@ -720,6 +739,7 @@ impl RunningProgram {
             memory: Memory::new(),
             registers: registers,
             zero_register: zero_register,
+            last_status: None,
         }
     }
 
@@ -731,13 +751,65 @@ impl RunningProgram {
         )
     }
 
+    fn step_in_place(&mut self) -> Result<(), Error> {
+        self.program.process_register_banks(&mut self.values)?;
+        for action in &self.program.actions {
+            debug!("processing action {:?}", action);
+            match action {
+               &Action::Assign(ref name, ref expr, ref width) => {
+                  let result = expr.evaluate(&self.values)?.as_width(*width);
+                  debug!("computed value {:?}", result);
+                  let mut inserted = false;
+                  if let Some(value) = self.values.get_mut(name) {
+                      *value = result;
+                      inserted = true;
+                  }
+                  if !inserted {
+                      self.values.insert(name.clone(), result);
+                  }
+               },
+               &Action::ReadMemory { ref is_read, ref address, ref out_port, ref bytes } => {
+                   let do_read = match is_read {
+                       &None => true,
+                       &Some(ref wire) => self.values.get(wire).unwrap().is_true(),
+                   };
+                   if do_read {
+                       let address_value = *self.values.get(address).unwrap();
+                       let value = self.memory.read(address_value.bits.low64(), *bytes);
+                       self.values.insert(out_port.clone(), value);
+                   } else {
+                       // keep the result well-defined
+                       let zero = WireValue::new(u128::new(0)).as_width(WireWidth::from((bytes * 8) as usize));
+                       self.values.insert(out_port.clone(), zero);
+                   }
+               },
+               &Action::WriteMemory { ref is_write, ref address, ref in_port, ref bytes } => {
+                   let do_write = match is_write {
+                       &None => true,
+                       &Some(ref wire) => self.values.get(wire).unwrap().is_true(),
+                   };
+                   if do_write {
+                       let address_value = self.values.get(address).unwrap();
+                       let input_value = self.values.get(in_port).unwrap();
+                       self.memory.write(address_value.bits.low64(), input_value.bits, *bytes);
+                   }
+               },
+               &Action::SetStatus { ref in_wire } => {
+                   self.last_status = Some(self.values.get(in_wire).unwrap().bits.low64() as u8);
+               },
+               _ => unimplemented!(),
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn cycle(&self) -> u32 { self.cycle }
 
     pub fn values(&self) -> &WireValues { &self.values }
 
     pub fn step(&mut self) -> Result<(), Error> {
-        let program = &self.program;
-        try!(program.step_in_place(&mut self.values));
+        try!(self.step_in_place());
         self.cycle += 1;
         Ok(())
     }
