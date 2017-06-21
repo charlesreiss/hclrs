@@ -284,7 +284,7 @@ pub enum Expr {
 pub type WireValues = HashMap<String, WireValue>;
 
 impl Expr {
-    pub fn width<'a>(&self, widths: &'a HashMap<String, WireWidth>) -> Result<WireWidth, Error> {
+    pub fn width<'a>(&self, widths: &'a HashMap<&'a str, WireWidth>) -> Result<WireWidth, Error> {
         match *self {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
@@ -297,7 +297,7 @@ impl Expr {
                                     |maybe_width, ref item| try!(maybe_width).combine(try!(item.value.width(widths)))),
             Expr::UnOp(UnOpCode::Negate, _) => Ok(WireWidth::Bits(1)),
             Expr::UnOp(UnOpCode::Complement, ref covered) => covered.width(widths),
-            Expr::NamedWire(ref name) => match widths.get(name) {
+            Expr::NamedWire(ref name) => match widths.get(name.as_str()) {
                 Some(ref width) => Ok(**width),
                 None => Err(Error::UndefinedWire(name.clone())),
             },

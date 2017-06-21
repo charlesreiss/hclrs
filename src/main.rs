@@ -22,6 +22,9 @@ use ast::{Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode
 use extprim::u128::u128;
 use program::{Program, RunningProgram};
 
+#[cfg(test)]
+use std::sync::{Once, ONCE_INIT};
+
 use errors::Error;
 
 fn main() {
@@ -62,6 +65,16 @@ fn main_real() -> Result<(), Error> {
     }
     println!("{}", running_program.dump());
     Ok(())
+}
+
+#[cfg(test)]
+static TEST_LOGGER_ONCE: Once = ONCE_INIT;
+
+#[cfg(test)]
+fn init_test_logger() {
+    TEST_LOGGER_ONCE.call_once(|| {
+        env_logger::init().unwrap();
+    })
 }
 
 #[test]
@@ -257,7 +270,7 @@ fn test_eval_mux() {
 
 #[test]
 fn test_program() {
-    env_logger::init().unwrap();
+    init_test_logger();
     let mut errors = Vec::new();
     let statements = parse_Statements(&mut errors,
         "const x = 42; wire y : 32; wire z : 32;
@@ -271,4 +284,24 @@ fn test_program() {
     expect_values.insert(String::from("y"), WireValue::from_decimal("84").as_width(WireWidth::from(32)));
     expect_values.insert(String::from("z"), WireValue::from_decimal("672").as_width(WireWidth::from(32)));
     assert_eq!(running_program.values(), &expect_values);
+}
+
+#[test]
+fn test_program_registers() {
+    init_test_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements(&mut errors,
+        "register xY { a: 32 = 1; };
+         x_a = Y_a + 1;").unwrap();
+    let program = Program::new(statements, vec!()).unwrap();
+    let mut running_program = RunningProgram::new(program, 0, 0);
+    let mut expect_values = WireValues::new();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
 }

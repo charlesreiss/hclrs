@@ -51,6 +51,7 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         let mut num_in_unvisited = HashMap::new();
         for node in &self.nodes {
             if !self.edges_inverted.contains_key(&node) {
+                debug!("found starting node {:?}", node);
                 queue.push_front(node.clone());
             }
             num_in_unvisited.insert(node.clone(),
@@ -290,7 +291,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
 
 #[derive(Debug)]
 pub struct RegisterBank {
-    signals: Vec<(String, String)>, // in, out
+    signals: Vec<(String, String, WireWidth)>, // in, out
     defaults: WireValues, // mapped to out names
     stall_signal: String,
     bubble_signal: String,
@@ -335,7 +336,7 @@ fn resolve_constants(exprs: &HashMap<&str, &Expr>) -> Result<HashMap<String, Wir
 
 fn assignments_to_actions<'a>(
         assignments: &'a HashMap<&'a str, &Expr>,
-        widths: &'a HashMap<String, WireWidth>,
+        widths: &'a HashMap<&'a str, WireWidth>,
         known_values: &'a HashSet<&'a str>,
         fixed_functions: &'a Vec<FixedFunction>,
     ) -> Result<Vec<Action>, Error> {
@@ -343,6 +344,7 @@ fn assignments_to_actions<'a>(
     let mut fixed_no_output = Vec::new();
     let mut graph = Graph::new();
     for (name, expr) in assignments {
+        graph.add_node(*name);
         for in_name in expr.referenced_wires() {
             if !known_values.contains(in_name) {
                 if !assignments.contains_key(in_name) {
@@ -356,22 +358,22 @@ fn assignments_to_actions<'a>(
     let mut unused_fixed_inputs = HashSet::new();
     let mut used_fixed_inputs = HashSet::new();
     for fixed in fixed_functions.iter() {
-        let mut missing_inputs: Vec<String> = Vec::new();
+        let mut missing_inputs: Vec<&str> = Vec::new();
         for in_name in &fixed.in_wires {
             if known_values.contains(in_name.name.as_str()) {
                 return Err(Error::RedefinedBuiltinWire(in_name.name.clone()));
             }
             if !assignments.contains_key(in_name.name.as_str()) {
-                missing_inputs.push(in_name.name.clone());
+                missing_inputs.push(in_name.name.as_str());
             }
         }
         if fixed.mandatory && missing_inputs.len() > 0 {
-            let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(x.clone())).collect();
+            let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(String::from(*x))).collect();
             return Err(Error::MultipleErrors(missing_list));
         } else if missing_inputs.len() > 0 {
             if let Some(ref name) = fixed.out_wire {
                 if graph.contains_node(&name.as_str()) {
-                    let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(x.clone())).collect();
+                    let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(String::from(*x))).collect();
                     return Err(Error::MultipleErrors(missing_list));
                 }
             }
@@ -426,6 +428,7 @@ fn assignments_to_actions<'a>(
     let mut result = Vec::new();
 
     if let Ok(sorted) = graph.topological_sort() {
+        // FIXME: covered is just a sanity-check, should be removeable
         let mut covered = known_values.clone();
         for name in sorted {
             match assignments.get(name) {
@@ -483,7 +486,7 @@ impl Program {
         let mut register_banks_raw = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
-                wires.insert(in_wire.name.clone(), in_wire.width);
+                wires.insert(in_wire.name.as_str(), in_wire.width);
             }
         }
         // FIXME: detect duplicates somewhere here
@@ -496,8 +499,8 @@ impl Program {
                 },
                 Statement::WireDecls(ref decls) => {
                     for ref decl in decls {
-                        wires.insert(decl.name.clone(), decl.width);
-                        needed_wires.insert(decl.name.clone());
+                        wires.insert(decl.name.as_str(), decl.width);
+                        needed_wires.insert(decl.name.as_str());
                     }
                 },
                 Statement::Assignment(ref assign) => {
@@ -522,7 +525,6 @@ impl Program {
 
         // Step 3: resolve register banks
         let mut register_banks = Vec::new();
-
         for decl in &register_banks_raw {
             // FIXME: should really iterate over graphemes
             let name_chars: Vec<char> = decl.name.chars().collect();
@@ -553,15 +555,10 @@ impl Program {
                 let value = register.default.evaluate(&constants)?;
                 // FIXME: better error
                 value.width.combine(register.width)?;
-                // do this before moving out_name to out_signals
                 defaults.insert(out_name.clone(), value.as_width(register.width));
-                wires.insert(out_name.clone(), register.width);
-                wires.insert(in_name.clone(), register.width);
-                needed_wires.insert(in_name.clone());
-                signals.push((in_name, out_name));
+                debug!("Generated wires {} and {} for register", in_name, out_name);
+                signals.push((in_name, out_name, register.width));
             }
-            wires.insert(stall_signal.clone(), WireWidth::Bits(1));
-            wires.insert(bubble_signal.clone(), WireWidth::Bits(1));
             // FIXME: detect redefinition of signals
             register_banks.push(RegisterBank {
                 signals: signals,
@@ -571,23 +568,45 @@ impl Program {
             });
         }
 
-        // Step 4: Check for missing wires
-        for name in needed_wires {
-            if !assignments.contains_key(name.as_str()) {
-                return Err(Error::UnsetWire(name));
+        let actions = {
+            // create nonmutable reference so we can borrow strings from register banks
+            let register_banks = &register_banks;
+            // move wires and needed_wires so they are dropped before register_banks
+            let mut wires = wires;
+            let mut needed_wires = needed_wires;
+            
+            // track widths, values we do/don't need assignment statements for
+            let mut known_values = HashSet::new();
+            for bank in register_banks {
+                for signal in &bank.signals {
+                    let in_name = &signal.0;
+                    let out_name = &signal.1;
+                    let width = signal.2;
+                    wires.insert(out_name.as_str(), width);
+                    known_values.insert(out_name.as_str());
+                    wires.insert(in_name.as_str(), width);
+                    needed_wires.insert(in_name.as_str());
+                }
+                wires.insert(bank.stall_signal.as_str(), WireWidth::Bits(1));
+                wires.insert(bank.bubble_signal.as_str(), WireWidth::Bits(1));
             }
-        }
 
-        // Step 5: order remaining assignments
-        let mut known_values = HashSet::new();
-        for key in constants_raw.keys() {
-            known_values.insert(*key);
-            wires.insert(String::from(*key), constants.get(&String::from(*key)).unwrap().width);
-        }
+            // Step 4: Check for missing wires
+            for name in needed_wires {
+                if !assignments.contains_key(name) {
+                    return Err(Error::UnsetWire(String::from(name)));
+                }
+            }
 
-        // TODO: add register banks as known values
-        let actions = try!(assignments_to_actions(&assignments, &wires,
-                                                  &known_values, &fixed_functions));
+            // Step 5: order remaining assignments
+            for key in constants_raw.keys() {
+                known_values.insert(*key);
+                wires.insert(key, constants.get(&String::from(*key)).unwrap().width);
+            }
+
+            assignments_to_actions(&assignments, &wires,
+                                   &known_values, &fixed_functions)?
+        };
 
         Ok(Program {
             constants: constants,
@@ -603,26 +622,26 @@ impl Program {
     pub fn initial_state(&self) -> WireValues {
         let mut values = self.constants();
         for bank in &self.register_banks {
-           // bubble initially to set register bank values?
-           values.insert(bank.stall_signal.clone(), WireValue::false_value());
-           values.insert(bank.bubble_signal.clone(), WireValue::true_value());
+            for signal in &bank.signals {
+                let in_name = &signal.0;
+                let out_name = &signal.1;
+                let the_value = *bank.defaults.get(out_name).unwrap();
+                values.insert(in_name.clone(), the_value);
+                values.insert(out_name.clone(), the_value);
+            }
+            values.insert(bank.bubble_signal.clone(), WireValue::false_value());
+            values.insert(bank.stall_signal.clone(), WireValue::false_value());
         }
         values
     }
 
-    pub fn step_in_place(&self, values: &mut WireValues) -> Result<(), Error> {
+    fn process_register_banks(&self, values: &mut WireValues) -> Result<(), Error> {
         for bank in &self.register_banks {
             let stalled = values.get(&bank.stall_signal).unwrap().is_true();
-            let bubbled = {
-                let ref_bubble = values.get_mut(&bank.bubble_signal).unwrap();
-                let old_bubble = ref_bubble.is_true();
-                // we set the initial values of register banks by bubbling in cycle 0;
-                // undo this for later cycles in case there's no assignment to do so
-                *ref_bubble = WireValue::false_value();
-                old_bubble
-            };
+            let bubbled = values.get(&bank.bubble_signal).unwrap().is_true();
             // FIXME: correct stall + bubble behavior
             if bubbled {
+                debug!("bubble {}", bank.bubble_signal);
                 for (k, v) in &bank.defaults {
                     *values.get_mut(k).unwrap() = *v;
                 }
@@ -630,15 +649,23 @@ impl Program {
                 for signal in &bank.signals {
                     let in_name = &signal.0;
                     let out_name = &signal.1;
+                    debug!("copy {} -> {}", in_name, out_name);
                     let new_value = *values.get(in_name).unwrap();
                     *values.get_mut(out_name).unwrap() = new_value;
                 }
             }
         }
+        Ok(())
+    }
+
+    pub fn step_in_place(&self, values: &mut WireValues) -> Result<(), Error> {
+        self.process_register_banks(values)?;
         for action in &self.actions {
+            debug!("processing action {:?}", action);
             match action {
                &Action::Assign(ref name, ref expr, ref width) => {
                   let result = try!(expr.evaluate(values)).as_width(*width);
+                  debug!("computed value {:?}", result);
                   let mut inserted = false;
                   if let Some(value) = values.get_mut(name) {
                       *value = result;
