@@ -321,7 +321,7 @@ fn test_memory() {
         memory.read(9, 4),
         WireValue { bits: u128::new(0), width: WireWidth::Bits(32) }
     );
-    memory.write(1, u128::new(0x0123456789ABCDEF), 64);
+    memory.write(1, u128::new(0x0123456789ABCDEF), 8);
     assert_eq!(
         memory.read(5, 4),
         WireValue { bits: u128::new(0x01234567), width: WireWidth::Bits(32) }
