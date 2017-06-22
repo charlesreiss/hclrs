@@ -67,6 +67,33 @@ WidthConstant : WireWidth = {
     },
 };
 
+SimpleConstant : u8 = {
+    // FIXME: error recovery
+    DEC =>? { match u8::from_str_radix(<>, 10) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                errors.push(ErrorRecovery {
+                    error: ParseError::User { error: Error::InvalidConstant(String::from(<>)) },
+                    dropped_tokens: vec!(),
+                });
+                Err(ParseError::User { error: () })
+            },
+        }
+    },
+    HEX =>? { match u8::from_str_radix(<>, 16) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                errors.push(ErrorRecovery {
+                    error: ParseError::User { error: Error::InvalidConstant(String::from(<>)) },
+                    dropped_tokens: vec!(),
+                });
+                Err(ParseError::User { error: () })
+            },
+        }
+    },
+};
+
+
 WireDecl : WireDecl = {
     <name:ID> ":" <width:WidthConstant> =>
         WireDecl { name: String::from(name), width: width },
@@ -159,14 +186,22 @@ MuxOption : MuxOption = {
 MuxOptions = Semicolon<MuxOption>;
 
 // FIXME: handle numbers being too large
-pub Term : Box<Expr> = {
+SimpleTerm : Box<Expr> = {
     DEC => Box::new(Expr::Constant(WireValue::from_decimal(<>))),
     HEX => Box::new(Expr::Constant(WireValue::from_hexadecimal(&<>[2..]))),
     BIN => Box::new(Expr::Constant(WireValue::from_binary(&<>[2..]))),
     "(" <e:Expr> ")" => e,
-    <u:UnOp> <t:Term> => Box::new(Expr::UnOp(u, t)),
     "[" <e:MuxOptions> "]" => Box::new(Expr::Mux(e)),
-    ID => Box::new(Expr::NamedWire(String::from(<>)))
+    ID => Box::new(Expr::NamedWire(String::from(<>))),
+};
+
+pub Term : Box<Expr> = {
+    <u:UnOp> <t:SimpleTerm> => Box::new(Expr::UnOp(u, t)),
+    <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> "]" => {
+        Box::new(Expr::BitSelect { from: e, low: low, high: high })
+    },
+    "(" <l:Term> ".." <r:Term> ")" => Box::new(Expr::Concat(l, r)),
+    <e:SimpleTerm> => e,
 };
 
 pub Expr: Box<Expr> = {

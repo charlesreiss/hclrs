@@ -300,6 +300,8 @@ pub enum Expr {
     UnOp(UnOpCode, Box<Expr>),
     Mux(Vec<MuxOption>),
     NamedWire(String),
+    BitSelect { from: Box<Expr>, low: u8, high: u8 },
+    Concat(Box<Expr>, Box<Expr>),
 }
 
 pub type WireValues = HashMap<String, WireValue>;
@@ -333,7 +335,36 @@ impl Expr {
                 Some(ref width) => Ok(**width),
                 None => Err(Error::UndefinedWire(name.clone())),
             },
-            _ => unimplemented!(),
+            Expr::BitSelect { ref from, low, high } => {
+                if low > high {
+                    return Err(Error::MisorderedBitIndexes(self.clone()));
+                }
+                match from.width(widths)? {
+                    WireWidth::Bits(inner_width) => {
+                        if high > inner_width {
+                            return Err(Error::InvalidBitIndex(self.clone(), high));
+                        }
+                    },
+                    // FIXME: should we allow this?
+                    WireWidth::Unlimited => {},
+                }
+                Ok(WireWidth::Bits(high - low))
+            }
+            Expr::Concat(ref left, ref right) => {
+                if let WireWidth::Bits(left_width) = left.width(widths)? {
+                    if let WireWidth::Bits(right_width) = right.width(widths)? {
+                        if left_width + right_width <= 128 {
+                            Ok(WireWidth::Bits(left_width + right_width))
+                        } else {
+                            Err(Error::WireTooWide(self.clone()))
+                        }
+                    } else {
+                        Err(Error::NoBitWidth((**right).clone()))
+                    }
+                } else {
+                    Err(Error::NoBitWidth((**left).clone()))
+                }
+            }
         }
     }
 
@@ -345,12 +376,12 @@ impl Expr {
         match *self {
             Expr::Constant(value) => Ok(value),
             Expr::BinOp(opcode, ref left, ref right) => {
-                let left_value = try!(left.evaluate(wires));
-                let right_value = try!(right.evaluate(wires));
+                let left_value = left.evaluate(wires)?;
+                let right_value = right.evaluate(wires)?;
                 opcode.apply(left_value, right_value)
             },
             Expr::UnOp(opcode, ref inner) => {
-                let inner_value = try!(inner.evaluate(wires));
+                let inner_value = inner.evaluate(wires)?;
                 opcode.apply(inner_value)
             },
             Expr::Mux(ref options) => {
@@ -368,6 +399,26 @@ impl Expr {
             Expr::NamedWire(ref name) => match wires.get(name) {
                 Some(value) => Ok(*value),
                 None => Err(Error::UndefinedWire(name.clone())),
+            },
+            Expr::BitSelect { ref from, low, high } => {
+                let inner_value = from.evaluate(wires)?.bits;
+                let shifted = inner_value >> low;
+                Ok(WireValue::new(shifted).as_width(WireWidth::Bits(high - low)))
+            },
+            Expr::Concat(ref left, ref right) => {
+                let left_value = left.evaluate(wires)?;
+                let right_value = right.evaluate(wires)?;
+                if let WireWidth::Bits(right_bits) = right_value.width {
+                    if let WireWidth::Bits(left_bits) = left_value.width {
+                        let shifted_left = left_value.bits << right_bits;
+                        Ok(WireValue::new(shifted_left | right_value.bits).as_width(
+                            WireWidth::Bits(left_bits + right_bits)))
+                    } else {
+                        Err(Error::NoBitWidth((**left).clone()))
+                    }
+                } else {
+                    Err(Error::NoBitWidth((**right).clone()))
+                }
             },
         }
     }
@@ -390,6 +441,13 @@ impl Expr {
             },
             Expr::NamedWire(ref name) => {
                 set.insert(name.as_str());
+            },
+            Expr::BitSelect { ref from, .. } => {
+                from.accumulate_referenced_wires(set);
+            },
+            Expr::Concat(ref left, ref right) => {
+                left.accumulate_referenced_wires(set);
+                right.accumulate_referenced_wires(set);
             },
         }
     }

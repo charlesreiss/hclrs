@@ -356,3 +356,41 @@ fn test_memory_program() {
     running_program.step().unwrap();
     assert_eq!(running_program.values().get("mem_output"), Some(&WireValue::from_hexadecimal("000123456789ABCD").as_width(WireWidth::from(64))));
 }
+
+#[test]
+fn test_eval_bitselect() {
+    init_test_logger();
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "0b1001011[1..4]").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("101")
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "0b1001011[0..4]").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("1011")
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "0b1001011[0..1]").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("1")
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "0b10001011[7..8]").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("1")
+    );
+    assert_eq!(errors.len(), 0);
+}
+
+#[test]
+fn test_eval_bitconcat() {
+    init_test_logger();
+    let mut errors = Vec::new();
+    assert_eq!(
+        parse_Expr(&mut errors, "(0b100 .. 0b1011)").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("1001011")
+    );
+    assert_eq!(
+        parse_Expr(&mut errors, "(0b1 .. 0b0)").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("10")
+    );
+    assert_eq!(errors.len(), 0);
+}
