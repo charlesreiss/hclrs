@@ -438,6 +438,8 @@ fn assignments_to_actions<'a>(
                         assert!(covered.contains(&in_name));
                     }
                     if let Some(the_width) = widths.get(name) {
+                        // FIXME: allow implict wire length shrinking?
+                        //        (check with HCL2D did)
                         expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
                         result.push(Action::Assign(
                             String::from(name),
@@ -797,6 +799,24 @@ impl RunningProgram {
                &Action::SetStatus { ref in_wire } => {
                    self.last_status = Some(self.values.get(in_wire).unwrap().bits.low64() as u8);
                },
+               &Action::ReadProgramRegister { ref number, ref out_port } => {
+                   let number = self.values.get(number).unwrap().bits.low64() as usize;
+                   if number < self.registers.len() {
+                       self.values.insert(out_port.clone(),
+                           WireValue { bits: u128::new(self.registers[number]), width: WireWidth::Bits(64) }
+                       );
+                   } else {
+                       self.values.insert(out_port.clone(), WireValue {
+                           bits: u128::new(0), width: WireWidth::Bits(64)
+                       });
+                   }
+               },
+               &Action::WriteProgramRegister { ref number, ref in_port } => {
+                   let number = self.values.get(number).unwrap().bits.low64() as usize;
+                   if number < self.registers.len() && number != self.zero_register {
+                       self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
+                   }
+               }
                _ => unimplemented!(),
             }
         }

@@ -394,3 +394,36 @@ fn test_eval_bitconcat() {
     );
     assert_eq!(errors.len(), 0);
 }
+
+#[test]
+fn test_regfile_program() {
+    init_test_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements(&mut errors,
+        "register xX { count: 64 = 0; }
+        wire count: 64;
+        count = X_count;
+        reg_inputE = count + 24;
+        reg_dstE = (count & 0xF)[0..4];
+        reg_srcA = ((count - 1) & 0xF)[0..4];
+        x_count = X_count + 1;
+        pc = 0; Stat = 1;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    running_program.step().unwrap();
+    let width64 = WireWidth::from(64);
+    assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("0").as_width(width64)));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("24").as_width(width64)));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("25").as_width(width64)));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("26").as_width(width64)));
+    for x in 3..16 {
+        running_program.step().unwrap();
+    }
+    assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("0").as_width(width64)));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("40").as_width(width64)));
+}
