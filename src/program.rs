@@ -1,6 +1,8 @@
 use ast::{Assignment, Statement, ConstDecl, WireDecl, WireWidth, WireValue, WireValues, Expr};
+use parser::parse_Statements;
 use extprim::u128::u128;
 use errors::Error;
+use lexer::Lexer;
 use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
 use std::collections::btree_map::BTreeMap;
@@ -471,8 +473,38 @@ fn assignments_to_actions<'a>(
     return Ok(result);
 }
 
+fn y86_preamble() -> Vec<Statement> {
+    let preamble_text = "
+const STAT_BUB = 0b000, STAT_AOK = 0b001, STAT_HLT = 0b010;  # expected behavior
+const STAT_ADR = 0b011, STAT_INS = 0b100, STAT_PIP = 0b110;  # error conditions
+
+const REG_RAX = 0b0000, REG_RCX = 0b0001, REG_RDX = 0b0010, REG_RBX = 0b0011;
+const REG_RSP = 0b0100, REG_RBP = 0b0101, REG_RSI = 0b0110, REG_RDI = 0b0111;
+const REG_R8  = 0b1000, REG_R9  = 0b1001, REG_R10 = 0b1010, REG_R11 = 0b1011;
+const REG_R12 = 0b1100, REG_R13 = 0b1101, REG_R14 = 0b1110, REG_NONE= 0b1111;
+
+# icodes; see figure 4.2
+const HALT   = 0b0000, NOP    = 0b0001, RRMOVQ = 0b0010, IRMOVQ = 0b0011;
+const RMMOVQ = 0b0100, MRMOVQ = 0b0101, OPQ    = 0b0110, JXX    = 0b0111;
+const CALL   = 0b1000, RET    = 0b1001, PUSHQ  = 0b1010, POPQ   = 0b1011;
+const CMOVXX = RRMOVQ;
+
+# ifuns; see figure 4.3
+const ALWAYS = 0b0000, LE   = 0b0001, LT   = 0b0010, EQ   = 0b0011;
+const NE     = 0b0100, GE   = 0b0101, GT   = 0b0110;
+const ADDQ   = 0b0000, SUBQ = 0b0001, ANDQ = 0b0010, XORQ = 0b0011;
+";
+    let mut errors = Vec::new(); 
+    // FIXME: adjust locations somehow
+    let result = parse_Statements(&mut errors, Lexer::new(preamble_text)).unwrap();
+    assert_eq!(errors.len(), 0);
+    result
+}
+
 impl Program {
     pub fn new_y86(statements: Vec<Statement>) -> Result<Program, Error> {
+        let mut statements = statements;
+        statements.extend(y86_preamble());
         Program::new(statements, y86_fixed_functions())
     }
 
@@ -836,6 +868,11 @@ impl RunningProgram {
 
     pub fn done(&self) -> bool {
         self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)) != &WireValue::from_u64(1)
+    }
+
+    pub fn dump_y86(&self) -> String {
+        // FIXME: copy y86 format
+        unimplemented!();
     }
 
     pub fn dump(&self) -> String {

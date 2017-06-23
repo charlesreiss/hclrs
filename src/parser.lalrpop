@@ -1,30 +1,49 @@
 use std::str::FromStr;
+use extprim::u128::u128;
 use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement};
 use errors::Error;
+use lexer;
+use lexer::Tok;
+use lexer::Spanned;
 use lalrpop_util::{ErrorRecovery, ParseError};
 
 // ErrorRecovery< locationType, tokenType, errorType >
-grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), Error>>);
+grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), Error>>);
 
-match {
-    "&&", // over &
-    "||",
-    ">=", // over >
-    ">>",
-    "<=",
-    "<<",
-    "!=", // over !
-    "wire",
-    "const",
-    "register",
-    r"0b[01]+" => BIN,
-    r"0x[0-9a-fA-F]+" => HEX,
-    r"0o[0-7]+" => OCT,
-} else {
-    r"[0-9]+" => DEC,
-} else {
-    r"\w+" => ID,
-    _
+extern {
+    type Location = usize;
+    type Error = Error;
+
+    enum lexer::Tok<'input> {
+        "&&" => Tok::AndAnd, "||" => Tok::OrOr,
+
+        "==" => Tok::Equal, "!=" => Tok::NotEqual,
+        ">=" => Tok::GreaterEqual, ">" => Tok::Greater,
+        "<=" => Tok::LessEqual, "<" => Tok::Less,
+
+        "=" => Tok::Assign,
+        ">>" => Tok::RightShift, "<<" => Tok::LeftShift,
+        "," => Tok::Comma, ";" => Tok::Semicolon,
+
+        "+" => Tok::Plus, "-" => Tok::Minus, "&" => Tok::And, "|" => Tok::Or,
+        "^" => Tok::Xor, "*" => Tok::Times, "/" => Tok::Divide, "!" => Tok::Not,
+
+        CONSTANT => Tok::Constant(<WireValue>),
+
+        "(" => Tok::OpenParen, ")" => Tok::CloseParen,
+        "{" => Tok::OpenBrace, "}" => Tok::CloseBrace,
+        "[" => Tok::OpenBracket, "]" => Tok::CloseBracket,
+
+        ":" => Tok::Colon,
+        "~" => Tok::Complement,
+        ".." => Tok::DotDot,
+
+        "wire" => Tok::Wire,
+        "const" => Tok::Const,
+        "register" => Tok::Register,
+
+        ID => Tok::Identifier(<&'input str>),
+    }
 }
 
 Repeat<delim, T>: Vec<T> = {
@@ -43,52 +62,21 @@ Comma<T>: Vec<T> = Repeat<",", T>;
 Semicolon<T>: Vec<T> = Repeat<";", T>;
 
 WidthConstant : WireWidth = {
-    <w:DEC> =>? match WireWidth::from_str(w) {
-        Ok(width) => Ok(width),
-        Err(_) => {
-            errors.push(ErrorRecovery {
-                error: ParseError::User { error: Error::InvalidWireWidth(String::from(w)) },
-                dropped_tokens: vec!(),
-            });
-            // Custom lexer to allow this to work?
-            Err(ParseError::User { error: () })
-        },
-    },
-    <w:HEX> =>? match WireWidth::from_str(w) {
-        Ok(width) => Ok(width),
-        Err(_) => {
-            errors.push(ErrorRecovery {
-                error: ParseError::User { error: Error::InvalidWireWidth(String::from(w)) },
-                dropped_tokens: vec!(),
-            });
-            // Custom lexer to allow this to work?
-            Err(ParseError::User { error: () })
-        },
+    <start:@L> <constant:CONSTANT> <end:@R> =>? {
+        if constant.bits <= u128::new(128) {
+            Ok(WireWidth::Bits(constant.bits.low64() as u8))
+        } else {
+            Err(ParseError::User { error: Error::InvalidWireWidth(start, end) })
+        }
     },
 };
 
 SimpleConstant : u8 = {
-    // FIXME: error recovery
-    DEC =>? { match u8::from_str_radix(<>, 10) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                errors.push(ErrorRecovery {
-                    error: ParseError::User { error: Error::InvalidConstant(String::from(<>)) },
-                    dropped_tokens: vec!(),
-                });
-                Err(ParseError::User { error: () })
-            },
-        }
-    },
-    HEX =>? { match u8::from_str_radix(<>, 16) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                errors.push(ErrorRecovery {
-                    error: ParseError::User { error: Error::InvalidConstant(String::from(<>)) },
-                    dropped_tokens: vec!(),
-                });
-                Err(ParseError::User { error: () })
-            },
+    <start:@L> <constant:CONSTANT> <end:@R> =>? {
+        if constant.bits <= u128::new(128) {
+            Ok(constant.bits.low64() as u8)
+        } else {
+            Err(ParseError::User { error: Error::InvalidConstant(start, end) })
         }
     },
 };
@@ -187,9 +175,7 @@ MuxOptions = Semicolon<MuxOption>;
 
 // FIXME: handle numbers being too large
 SimpleTerm : Box<Expr> = {
-    DEC => Box::new(Expr::Constant(WireValue::from_decimal(<>))),
-    HEX => Box::new(Expr::Constant(WireValue::from_hexadecimal(&<>[2..]))),
-    BIN => Box::new(Expr::Constant(WireValue::from_binary(&<>[2..]))),
+    CONSTANT => Box::new(Expr::Constant(<>)),
     "(" <e:Expr> ")" => e,
     "[" <e:MuxOptions> "]" => Box::new(Expr::Mux(e)),
     ID => Box::new(Expr::NamedWire(String::from(<>))),

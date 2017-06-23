@@ -4,6 +4,7 @@ use std::fmt;
 use std::io;
 
 use ast::{Expr, MuxOption};
+use lexer::Loc;
 
 use lalrpop_util;
 
@@ -20,13 +21,15 @@ pub enum Error {
     RedefinedBuiltinWire(String),
     UnsetWire(String),
     WireLoop(Vec<String>),
-    InvalidWireWidth(String),
+    InvalidWireWidth(Loc, Loc),
     InvalidRegisterBankName(String),
     InvalidBitIndex(Expr, u8),
     NoBitWidth(Expr),
     MisorderedBitIndexes(Expr),
-    InvalidConstant(String),
+    InvalidConstant(Loc, Loc),
     WireTooWide(Expr),
+    UnterminatedComment(Loc),
+    LexicalError(Loc),
     IoError(io::Error),
     MultipleErrors(Vec<Error>),
     // FIXME: multiple errors?
@@ -52,13 +55,15 @@ impl error::Error for Error {
             Error::RedefinedBuiltinWire(_) => "redefined wire from fixed functionality",
             Error::UnsetWire(_) => "wire defined but never set",
             Error::WireLoop(_) => "circular dependency between wires found",
-            Error::InvalidWireWidth(_) => "wire width out of range",
+            Error::InvalidWireWidth(_, _) => "wire width out of range",
             Error::InvalidRegisterBankName(_) => "invalid register bank name",
             Error::InvalidBitIndex(_, _) => "invalid bit index for bit-slicing",
-            Error::InvalidConstant(_) => "constant is too big or small",
+            Error::InvalidConstant(_, _) => "constant is too big or small",
             Error::WireTooWide(_) => "wire would be wider than 128 bits",
             Error::NoBitWidth(_) => "expression has unknown bit width",
             Error::MisorderedBitIndexes(_) => "misordered bit indexes in bitslice",
+            Error::UnterminatedComment(_) => "unterminated /*-style comment",
+            Error::LexicalError(_) => "unrecognized token",
             Error::IoError(_) => "an I/O error occurred",
             Error::MultipleErrors(_) => "multiple errors",
         }
