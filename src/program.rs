@@ -219,7 +219,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
         FixedFunction {
             in_wires: vec!(WireDecl {
                 name: String::from("Stat"),
-                width: WireWidth::Bits(4),
+                width: WireWidth::Bits(3),
             }),
             out_wire: None,
             action: Action::SetStatus { in_wire: String::from("Stat") },
@@ -873,11 +873,11 @@ impl RunningProgram {
 
     // FIXME: hard-coded Y86 status codes
     pub fn done(&self) -> bool {
-        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)) != &WireValue::from_u64(1) || self.cycle > self.timeout
+        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)).bits != u128::new(1) || self.cycle > self.timeout
     }
 
     pub fn halted(&self) -> bool {
-        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)) == &WireValue::from_u64(2)
+        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)).bits == u128::new(2)
     }
 
     pub fn timed_out(&self) -> bool {

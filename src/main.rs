@@ -68,6 +68,7 @@ fn main_real() -> Result<(), Error> {
         try!(running_program.step());
     }
     println!("{}", running_program.dump());
+    println!("{}", running_program.dump_y86());
     Ok(())
 }
 
