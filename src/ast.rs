@@ -3,7 +3,6 @@ extern crate num_traits;
 
 use extprim::u128::u128;
 
-use std::cmp;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
 use std::convert::From;
@@ -40,26 +39,6 @@ impl WireWidth {
         match *self {
             WireWidth::Bits(x) => x,
             _ => 128,
-        }
-    }
-    fn bits_or(self, s: u8) -> u8 {
-        match self {
-            WireWidth::Bits(t) => t,
-            WireWidth::Unlimited => s,
-        }
-    }
-
-    pub fn min(self, w: WireWidth) -> WireWidth {
-        match self {
-            WireWidth::Unlimited => w,
-            WireWidth::Bits(s) => WireWidth::Bits(cmp::min(s, w.bits_or(s)))
-        }
-    }
-
-    pub fn max(self, w: WireWidth) -> WireWidth {
-        match self {
-            WireWidth::Unlimited => w,
-            WireWidth::Bits(s) => WireWidth::Bits(cmp::max(s, w.bits_or(s)))
         }
     }
 
@@ -111,10 +90,6 @@ impl WireValue {
         WireValue { bits: u128::new(0), width: WireWidth::Bits(1) }
     }
 
-    pub fn true_value() -> WireValue {
-        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
-    }
-
     pub fn new(v: u128) -> WireValue {
         WireValue { bits: v, width: WireWidth::Unlimited }
     }
@@ -155,10 +130,6 @@ impl WireValue {
 
     pub fn is_true(self) -> bool {
         self.bits > u128::new(0)
-    }
-
-    pub fn is_false(self) -> bool {
-        self.bits == u128::new(0)
     }
 }
 
@@ -462,10 +433,6 @@ impl Expr {
         let mut result = HashSet::new();
         self.accumulate_referenced_wires(&mut result);
         result
-    }
-
-    pub fn errors() -> Vec<Error> {
-        unimplemented!();
     }
 }
 

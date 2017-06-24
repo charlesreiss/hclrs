@@ -6,8 +6,6 @@ use std::io;
 use ast::{Expr, MuxOption};
 use lexer::Loc;
 
-use lalrpop_util;
-
 #[derive(Debug)]
 pub enum Error {
     MismatchedMuxWidths(Vec<MuxOption>),
@@ -83,7 +81,7 @@ impl error::Error for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self);
+        write!(f, "{:?}", self)?;
         Ok(())
     }
 }

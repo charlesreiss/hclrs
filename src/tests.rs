@@ -1,5 +1,5 @@
 use ast::{Statement, Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
-use program::{Program, RunningProgram, Memory};
+use program::{Program, RunningProgram};
 use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 use lexer::{Lexer, Tok};
 use errors::Error;
@@ -20,29 +20,33 @@ pub fn init_logger() {
     })
 }
 
+#[allow(non_snake_case)]
 fn parse_Expr_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
         Result<Box<Expr>, ParseErrorType<'input>> {
-    let mut lexer = Lexer::new(s);
+    let lexer = Lexer::new(s);
     parse_Expr(errors, lexer)
 }
 
+#[allow(non_snake_case)]
 fn parse_WireDecls_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
         Result<Vec<WireDecl>, ParseErrorType<'input>> {
-    let mut lexer = Lexer::new(s);
+    let lexer = Lexer::new(s);
     parse_WireDecls(errors, lexer)
 }
 
 
+#[allow(non_snake_case)]
 fn parse_ConstDecls_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
         Result<Vec<ConstDecl>, ParseErrorType<'input>> {
-    let mut lexer = Lexer::new(s);
+    let lexer = Lexer::new(s);
     parse_ConstDecls(errors, lexer)
 }
 
+#[allow(non_snake_case)]
 fn parse_Statements_str<'input>(
     errors: &mut Vec<ErrorRecoveryType<'input>>,
     s: &'input str) -> Result<Vec<Statement>, ParseErrorType<'input>> {
-    let mut lexer = Lexer::new(s);
+    let lexer = Lexer::new(s);
     parse_Statements(errors, lexer)
 }
 
@@ -369,7 +373,7 @@ fn regfile_program() {
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("25").as_width(width64)));
     running_program.step().unwrap();
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("26").as_width(width64)));
-    for x in 3..16 {
+    for _ in 3..16 {
         running_program.step().unwrap();
     }
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("0").as_width(width64)));

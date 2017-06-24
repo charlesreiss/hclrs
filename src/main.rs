@@ -15,13 +15,11 @@ mod tests;
 
 use std::env;
 use std::fs::File;
-use std::io;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use parser::parse_Statements;
-use program::{Program, RunningProgram, Memory};
+use program::{Program, RunningProgram};
 use lexer::Lexer;
-use lalrpop_util::{ErrorRecovery, ParseError};
 
 use errors::Error;
 
@@ -32,7 +30,7 @@ fn main() {
 
 fn main_real() -> Result<(), Error> {
     let args: Vec<String> = env::args().collect();
-    let mut filename: String = String::from("/dev/stdin");
+    let filename: String;
     let mut yo_filename: Option<String> = None;
     // FIXME -i, -d flags, timeout, default timeout
     match args.len() {
@@ -56,7 +54,7 @@ fn main_real() -> Result<(), Error> {
 
     // FIXME: wrapping for ParseErrors (has lifetime issues)
     let mut errors = Vec::new();
-    let mut lexer = Lexer::new(contents.as_str());
+    let lexer = Lexer::new(contents.as_str());
     let statements = parse_Statements(&mut errors, lexer).unwrap();
 
     let program = Program::new_y86(statements)?;
@@ -66,7 +64,7 @@ fn main_real() -> Result<(), Error> {
         let yo_file = File::open(Path::new(&filename))?;
         let mut yo_reader = BufReader::new(yo_file);
         debug!("about to load yo file");
-        running_program.load_memory_y86(&mut yo_reader);
+        running_program.load_memory_y86(&mut yo_reader)?;
     } else {
         debug!("no yo file");
     }
@@ -74,8 +72,7 @@ fn main_real() -> Result<(), Error> {
     while !running_program.done() && running_program.cycle() < 100 {
         try!(running_program.step());
     }
-    println!("{}", running_program.dump());
-    println!("{}", running_program.dump_y86());
+    println!("{}", running_program.dump_y86_str());
     Ok(())
 }
 

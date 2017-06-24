@@ -1,10 +1,7 @@
-use std::str::FromStr;
 use extprim::u128::u128;
 use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement};
 use errors::Error;
-use lexer;
 use lexer::Tok;
-use lexer::Spanned;
 use lalrpop_util::{ErrorRecovery, ParseError};
 
 // ErrorRecovery< locationType, tokenType, errorType >
@@ -14,7 +11,7 @@ extern {
     type Location = usize;
     type Error = Error;
 
-    enum lexer::Tok<'input> {
+    enum Tok<'input> {
         "&&" => Tok::AndAnd, "||" => Tok::OrOr,
 
         "==" => Tok::Equal, "!=" => Tok::NotEqual,
@@ -87,16 +84,16 @@ WireDecl : WireDecl = {
         WireDecl { name: String::from(name), width: width },
 };
 
+// public for testing
 pub WireDecls : Vec<WireDecl> = {
     "wire" <c:Comma<WireDecl>> => c
 };
-
-// FIXME: ConstDecls
 
 ConstDecl : ConstDecl = {
     <name:ID> "=" <e:Expr> => ConstDecl { name: String::from(name), value: e }
 };
 
+// public for testing
 pub ConstDecls : Vec<ConstDecl> = {
     "const" <c:Comma<ConstDecl>> => c
 };
@@ -173,7 +170,6 @@ MuxOption : MuxOption = {
 
 MuxOptions = Semicolon<MuxOption>;
 
-// FIXME: handle numbers being too large
 SimpleTerm : Box<Expr> = {
     CONSTANT => Box::new(Expr::Constant(<>)),
     "(" <e:Expr> ")" => e,
@@ -181,7 +177,7 @@ SimpleTerm : Box<Expr> = {
     ID => Box::new(Expr::NamedWire(String::from(<>))),
 };
 
-pub Term : Box<Expr> = {
+Term : Box<Expr> = {
     <u:UnOp> <t:SimpleTerm> => Box::new(Expr::UnOp(u, t)),
     <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> "]" => {
         Box::new(Expr::BitSelect { from: e, low: low, high: high })
@@ -190,6 +186,7 @@ pub Term : Box<Expr> = {
     <e:SimpleTerm> => e,
 };
 
+// public for testing
 pub Expr: Box<Expr> = {
     ExprLogicalOr,
 };
@@ -230,7 +227,7 @@ StatementNoSemi : Statement = {
     RegisterBankDecl => Statement::RegisterBankDecl(<>),
 };
 
-pub Statement : Statement = {
+Statement : Statement = {
     <s:StatementNeedSemi> => s,
     <s:StatementNoSemi> => s,
 };

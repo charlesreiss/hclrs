@@ -45,8 +45,7 @@ impl<'input> FileContents<'input> {
     }
 
     pub fn line_number_and_bounds(&self, index: usize) -> (usize, usize, usize) {
-        let filename = self.filename(index);
-        let index = match self.filenames.binary_search_by_key(&index, |ref x| x.0) {
+        let index = match self.newlines.binary_search_by_key(&index, |ref x| x.0) {
             Ok(x) => x,
             Err(x) => x - 1
         };
@@ -79,7 +78,7 @@ impl<'input> FileContents<'input> {
     pub fn show_region(&self, start: usize, end: usize) -> String {
         let filename = self.filename(start);
         let (begin_line_no, begin_loc, _) = self.line_number_and_bounds(start);
-        let (end_line_no, _, end_loc) = self.line_number_and_bounds(start);
+        let (_, _, end_loc) = self.line_number_and_bounds(end);
         let segment = &self.data[begin_loc..end_loc];
         let mut result = String::new();
         // FIXME: variable width line count
@@ -108,7 +107,7 @@ impl<'input> Lexer<'input> {
 
     fn internal_next(&mut self) -> Option<(usize, char)> {
         match self.pending {
-            Some(x) => {
+            Some(_) => {
                 debug!("next from unget");
                 self.last = self.pending;
                 self.pending = None;
@@ -132,7 +131,7 @@ impl<'input> Lexer<'input> {
 
 
     fn peek_char(&mut self) -> Option<char> {
-        if let Some((i, c)) = self.internal_next() {
+        if let Some((_, c)) = self.internal_next() {
             debug!("peeked at {:?}", c);
             self.unget();
             Some(c)
@@ -197,11 +196,11 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn handle_constant(&mut self, i: usize, c: char) -> Spanned<Tok<'input>, Error> {
-        if let Some((i2, c2)) = self.internal_next() {
+    fn handle_constant(&mut self, i: usize) -> Spanned<Tok<'input>, Error> {
+        if let Some((_, c2)) = self.internal_next() {
             match c2 {
                 'x' => {
-                    let c3 = self.expect_or_error(is_hexadecimal_char)?;
+                    self.expect_or_error(is_hexadecimal_char)?;
                     let (start_noprefix, hex, end) = self.get_while(i + 2, is_hexadecimal_char);
                     let start = start_noprefix - 2;
                     match u128::from_str_radix(&hex, 16) {
@@ -214,7 +213,7 @@ impl<'input> Lexer<'input> {
                     }
                 },
                 'b' => {
-                    let c3 = self.expect_or_error(is_binary_char)?;
+                    self.expect_or_error(is_binary_char)?;
                     let (start_noprefix, bin, end) = self.get_while(i + 2, is_binary_char);
                     let start = start_noprefix - 2;
                     self.expect_peek_not(is_decimal_char)?; // disallow 0b010112
@@ -320,19 +319,18 @@ impl<'input> Iterator for Lexer<'input> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some((i, c)) = self.internal_next() {
-                let cur = (i, c);
                 debug!("read {:?}", (i, c));
                 if c.is_whitespace() {
                     debug!("skip whitespace");
                     continue;
                 } else if is_start_identifier_char(c) {
                     debug!("identifier?");
-                    let (start, id, end) = self.get_while(i, is_identifier_char);
+                    let (start, _, end) = self.get_while(i, is_identifier_char);
                     let the_token = self.resolve_identifier(start, end);
                     return Some(Ok((start, the_token, end)));
                 } else if c >= '0' && c <= '9' {
                     debug!("integer constant");
-                    return Some(self.handle_constant(i, c));
+                    return Some(self.handle_constant(i));
                 } else {
                     let result = match c {
                         '#' => { // comment

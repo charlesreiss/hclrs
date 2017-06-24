@@ -1,4 +1,4 @@
-use ast::{Assignment, Statement, ConstDecl, WireDecl, WireWidth, WireValue, WireValues, Expr};
+use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, Expr};
 use parser::parse_Statements;
 use extprim::u128::u128;
 use errors::Error;
@@ -38,13 +38,15 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         return self.nodes.contains(&node);
     }
 
-    fn contains(&self, from: T, to: T) -> bool {
-        if let Some(ref out_edges) = self.edges.get(&from) {
-            out_edges.contains(&to)
+    #[cfg(test)]
+    fn out_edges(&self, to: &T) -> HashSet<T> {
+        if let Some(result) = self.edges.get(to) {
+            result.clone()
         } else {
-            false
+            HashSet::new()
         }
     }
+
 
     // topological sort, or find cycle
     fn topological_sort(&self) -> Result<Vec<T>, Vec<T>> {
@@ -95,24 +97,6 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         Ok(result)
     }
 
-    #[cfg(test)]
-    fn in_edges(&self, to: &T) -> HashSet<T> {
-        if let Some(result) = self.edges_inverted.get(to) {
-            result.clone()
-        } else {
-            HashSet::new()
-        }
-    }
-
-    #[cfg(test)]
-    fn out_edges(&self, to: &T) -> HashSet<T> {
-        if let Some(result) = self.edges.get(to) {
-            result.clone()
-        } else {
-            HashSet::new()
-        }
-    }
-
     fn new() -> Graph<T> {
         Graph {
             edges: HashMap::new(),
@@ -142,7 +126,6 @@ pub struct FixedFunction {
     out_wire: Option<String>,
     action: Action,
     mandatory: bool,
-    is_last: bool,
 }
 
 impl FixedFunction {
@@ -155,7 +138,6 @@ impl FixedFunction {
                 out_port: String::from(output),
             },
             mandatory: false,
-            is_last: false,
         }
     }
 
@@ -177,7 +159,6 @@ impl FixedFunction {
                 in_port: String::from(input),
             },
             mandatory: false,
-            is_last: true,
         }
     }
 }
@@ -192,7 +173,6 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
             out_wire: None,
             action: Action::SetStatus { in_wire: String::from("Stat") },
             mandatory: true,
-            is_last: true,
         },
         FixedFunction {
             in_wires: vec!(WireDecl {
@@ -207,7 +187,6 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 bytes: 10
             },
             mandatory: true,
-            is_last: false,
         },
         FixedFunction {
             in_wires: vec!(WireDecl {
@@ -226,7 +205,6 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 bytes: 8
             },
             mandatory: false,
-            is_last: false,
         },
         FixedFunction {
             // FIXME: some way to indicate that mem_write -> mem_input + mem_addr?
@@ -252,7 +230,6 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 bytes: 8,
             },
             mandatory: false,
-            is_last: false,
         },
         FixedFunction::read_port("reg_srcA", "reg_outputA"),
         FixedFunction::read_port("reg_srcB", "reg_outputB"),
@@ -268,11 +245,6 @@ pub struct RegisterBank {
     defaults: WireValues, // mapped to out names
     stall_signal: String,
     bubble_signal: String,
-}
-
-pub struct RegisterWritePort {
-    number: String,
-    value: String
 }
 
 // interpreter representation of a program
@@ -516,8 +488,7 @@ impl Program {
                 },
                 Statement::RegisterBankDecl(ref decl) => {
                     register_banks_raw.push(decl);
-                }
-                _ => unimplemented!(),
+                },
             }
         }
 
@@ -794,7 +765,7 @@ impl RunningProgram {
                zero_register: usize) -> RunningProgram {
         let values = program.initial_state();
         let mut registers = Vec::new();
-        for i in 0..num_registers {
+        for _ in 0..num_registers {
             registers.push(0);
         }
         RunningProgram {
@@ -809,8 +780,8 @@ impl RunningProgram {
         }
     }
 
-    pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) {
-        self.memory.load_from_y86(reader);
+    pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) -> Result<(), Error> {
+        self.memory.load_from_y86(reader)
     }
 
     pub fn new_y86(program: Program) -> RunningProgram {
@@ -884,8 +855,7 @@ impl RunningProgram {
                    if number < self.registers.len() && number != self.zero_register {
                        self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
                    }
-               }
-               _ => unimplemented!(),
+               },
             }
         }
 
@@ -915,26 +885,27 @@ impl RunningProgram {
         self.cycle >= self.timeout
     }
 
-    fn dump_program_registers_y86<W: Write>(&self, result: &mut W) {
+    fn dump_program_registers_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
         writeln!(result, "| RAX: {:16x}   RCX: {:16x}   RDX: {:16x} |",
-            self.registers[0], self.registers[1], self.registers[2]);
+            self.registers[0], self.registers[1], self.registers[2])?;
         writeln!(result, "| RBX: {:16x}   RSP: {:16x}   RBP: {:16x} |",
-            self.registers[3], self.registers[4], self.registers[5]);
+            self.registers[3], self.registers[4], self.registers[5])?;
         writeln!(result, "| RSI: {:16x}   RDI: {:16x}   R8:  {:16x} |",
-            self.registers[6], self.registers[7], self.registers[8]);
+            self.registers[6], self.registers[7], self.registers[8])?;
         writeln!(result, "| R9:  {:16x}   R10: {:16x}   R11: {:16x} |",
-            self.registers[9], self.registers[10], self.registers[11]);
+            self.registers[9], self.registers[10], self.registers[11])?;
         writeln!(result, "| R12: {:16x}   R13: {:16x}   R14: {:16x} |",
-            self.registers[9], self.registers[10], self.registers[11]);
+            self.registers[9], self.registers[10], self.registers[11])?;
+        Ok(())
     }
 
-    fn dump_bank<W: Write>(&self, result: &mut W, bank: &RegisterBank) {
+    fn dump_bank<W: Write>(&self, result: &mut W, bank: &RegisterBank) -> Result<(), Error> {
         let mut line_loc = 0;
         let max_loc = 71;
         let bank_stalled = self.values.get(&bank.stall_signal).unwrap().is_true();
         let bank_bubbled = self.values.get(&bank.bubble_signal).unwrap().is_true();
-        let status = if bank_bubbled { 'B' } else if bank_bubbled { 'S' } else { 'N' };
-        write!(result, "| register {}({}) {{", bank.label, status);
+        let status = if bank_bubbled { 'B' } else if bank_stalled { 'S' } else { 'N' };
+        write!(result, "| register {}({}) {{", bank.label, status)?;
         line_loc += 18;
         for signal in &bank.signals {
             let name = signal.0.split_at(2).1;
@@ -942,37 +913,38 @@ impl RunningProgram {
             let hex_width = ((width.bits_or_128() + 3) / 4) as usize;
             if line_loc + 2 + hex_width + name.len() >= max_loc {
                 while line_loc < max_loc {
-                    write!(result, " ");
+                    write!(result, " ")?;
                     line_loc += 1;
                 }
-                write!(result, " |\n| ");
+                write!(result, " |\n| ")?;
                 line_loc = 2;
             }
             let value = self.values.get(&signal.1).unwrap().bits;
-            write!(result, " {}={:hex_width$x}", name, value, hex_width=hex_width);
+            write!(result, " {}={:hex_width$x}", name, value, hex_width=hex_width)?;
             line_loc += 2 + hex_width + name.len();
         }
         if line_loc + 2 >= max_loc {
             while line_loc < max_loc {
-                write!(result, " ");
+                write!(result, " ")?;
                 line_loc += 1;
             }
-            write!(result, " |\n| ");
+            write!(result, " |\n| ")?;
             line_loc = 2;
         }
-        write!(result, " }}");
+        write!(result, " }}")?;
         line_loc += 2;
         while line_loc < max_loc {
-            write!(result, " ");
+            write!(result, " ")?;
             line_loc += 1;
         }
-        write!(result, " |\n");
+        write!(result, " |\n")?;
+        Ok(())
     }
 
-    fn dump_custom_registers_y86<W: Write>(&self, result: &mut W) {
+    fn dump_custom_registers_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
         let mut banks_by_letter: HashMap<char, &RegisterBank> = HashMap::new();
         if self.program.register_banks.len() == 0 {
-            return;
+            return Ok(());
         }
         for bank in &self.program.register_banks {
             let letter = bank.stall_signal.chars().last().unwrap();
@@ -981,7 +953,7 @@ impl RunningProgram {
         let order = ['P', 'F', 'D', 'E', 'M', 'W'];
         for letter in order.iter() {
             if let Some(bank) = banks_by_letter.get(letter) {
-                self.dump_bank(result, bank);
+                self.dump_bank(result, bank)?;
             }
         }
         for letter in order.iter() {
@@ -991,32 +963,33 @@ impl RunningProgram {
         letters.sort();
         for letter in letters {
             let bank = banks_by_letter.get(&letter).unwrap();
-            self.dump_bank(result, bank);
+            self.dump_bank(result, bank)?;
         }
+        Ok(())
     }
 
-    fn dump_memory_y86<W: Write>(&self, result: &mut W) {
-        writeln!(result,   "| used memory:   _0 _1 _2 _3  _4 _5 _6 _7   _8 _9 _a _b  _c _d _e _f    |");
+    fn dump_memory_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
+        writeln!(result,   "| used memory:   _0 _1 _2 _3  _4 _5 _6 _7   _8 _9 _a _b  _c _d _e _f    |")?;
         let mut cur_addr: u64 = 0;
         for (&k, &v) in &self.memory.data {
             debug!("found memory {:x}={:x}", k, v);
             while cur_addr <= k {
                 debug!("output addr {:x}", cur_addr);
                 if cur_addr % 16 == 0 {
-                    write!(result, "|     {:07x}:  ", cur_addr);
+                    write!(result, "|     {:07x}:  ", cur_addr)?;
                 }
                 if cur_addr == k {
-                    write!(result, " {:02x}", v);
+                    write!(result, " {:02x}", v)?;
                 } else {
-                    write!(result, "   ");
+                    write!(result, "   ")?;
                 }
                 match cur_addr % 16 {
-                    3 | 11 => {write!(result, " ");},
-                    7 => {write!(result, "  ");},
+                    3 | 11 => {write!(result, " ")?;},
+                    7 => {write!(result, "  ")?;},
                     _ => {},
                 }
                 if cur_addr % 16 == 15 {
-                    write!(result, "    |\n");
+                    write!(result, "    |\n")?;
                     /* potentially skip ahead */
                     if k > cur_addr {
                         cur_addr = (k >> 4) << 4;
@@ -1030,58 +1003,59 @@ impl RunningProgram {
         }
         while cur_addr % 16 != 0 {
             match cur_addr % 16 {
-                15 => write!(result, "      |\n"),
-                3 | 11 => write!(result, "     "),
-                7 => write!(result, "     "),
-                _ => write!(result, "   "),
+                15 => write!(result, "      |\n")?,
+                3 | 11 => write!(result, "     ")?,
+                7 => write!(result, "     ")?,
+                _ => write!(result, "   ")?,
             };
             cur_addr += 1;
         }
+        Ok(())
     }
 
-    pub fn dump_y86(&self) -> String {
-        let mut result: Vec<u8> = Vec::new();
-        // FIXME: copy y86 format
+    pub fn dump_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
         if self.halted() {
             writeln!(result,
                 "+----------------------- halted in state: ------------------------------+"
-            );
+            )?;
         } else if self.done() {
             writeln!(result,
                 "+------------------- error caused in state: ----------------------------+"
-            );
+            )?;
         } else if self.timed_out() {
             writeln!(result,
                 "+------------ timed out after {:5} cycles in state: -------------------+",
                 self.cycle
-            );
+            )?;
         } else {
             writeln!(result,
                 "+------------------- between cycles {:4} and {:4} ----------------------+",
                 self.cycle, self.cycle + 1
-            );
+            )?;
         }
-        self.dump_program_registers_y86(&mut result);
-        self.dump_custom_registers_y86(&mut result);
-        self.dump_memory_y86(&mut result);
+        self.dump_program_registers_y86(result)?;
+        self.dump_custom_registers_y86(result)?;
+        self.dump_memory_y86(result)?;
         if self.halted() {
             writeln!(result,
                 "+--------------------- (end of halted state) ---------------------------+"
-            );
+            )?;
         } else if self.done() {
             writeln!(result,
                 "+-------------------- (end of error state) -----------------------------+"
-            );
+            )?;
         } else {
             writeln!(result,
                 "+-----------------------------------------------------------------------+"
-            );
+            )?;
         }
-        String::from_utf8_lossy(result.as_slice()).into_owned()
+        Ok(())
     }
 
-    pub fn dump(&self) -> String {
-        format!("{:?}", self.values)
+    pub fn dump_y86_str(&self) -> String {
+        let mut result: Vec<u8> = Vec::new();
+        self.dump_y86(&mut result).expect("unexpected error while dumping state");
+        String::from_utf8_lossy(result.as_slice()).into_owned()
     }
 }
 
