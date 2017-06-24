@@ -123,38 +123,6 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
     }
 }
 
-#[cfg(test)]
-fn verify_sort<T: Eq + Clone + Hash + Debug>(graph: &Graph<T>) {
-    if let Ok(the_result) = graph.topological_sort() {
-        let mut seen = HashSet::new();
-        for node in &the_result {
-            for other in graph.out_edges(&node) {
-                assert!(!seen.contains(&other), "{:?} -> {:?} violates order {:?}",
-                    node, other, the_result);
-            }
-            seen.insert(node.clone());
-        }
-    } else {
-        assert!(false);
-    }
-}
-
-
-#[test]
-fn test_graph() {
-    let mut graph = Graph::new();
-    graph.insert("foo", "bar");
-    graph.insert("bar", "baz");
-    verify_sort(&graph);
-    graph.insert("foo", "baz");
-    verify_sort(&graph);
-    graph.insert("foo", "quux");
-    graph.insert("quux", "other");
-    verify_sort(&graph);
-    graph.add_node("unused");
-    verify_sort(&graph);
-}
-
 #[derive(Debug,PartialEq,Eq,Clone)]
 pub enum Action {
     // not included:
@@ -840,7 +808,7 @@ impl RunningProgram {
             timeout: u32::max_value(),
         }
     }
-    
+
     pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) {
         self.memory.load_from_y86(reader);
     }
@@ -1114,5 +1082,77 @@ impl RunningProgram {
 
     pub fn dump(&self) -> String {
         format!("{:?}", self.values)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::tests::init_logger;
+    use ast::{WireWidth, WireValue};
+
+    use extprim::u128::u128;
+    use std::fmt::Debug;
+    use std::hash::Hash;
+    use std::collections::hash_set::HashSet;
+
+    fn verify_sort<T: Eq + Clone + Hash + Debug>(graph: &Graph<T>) {
+        if let Ok(the_result) = graph.topological_sort() {
+            let mut seen = HashSet::new();
+            for node in &the_result {
+                for other in graph.out_edges(&node) {
+                    assert!(!seen.contains(&other), "{:?} -> {:?} violates order {:?}",
+                        node, other, the_result);
+                }
+                seen.insert(node.clone());
+            }
+        } else {
+            assert!(false);
+        }
+    }
+
+
+    #[test]
+    fn graph_sorts() {
+        init_logger();
+        let mut graph = Graph::new();
+        graph.insert("foo", "bar");
+        graph.insert("bar", "baz");
+        verify_sort(&graph);
+        graph.insert("foo", "baz");
+        verify_sort(&graph);
+        graph.insert("foo", "quux");
+        graph.insert("quux", "other");
+        verify_sort(&graph);
+        graph.add_node("unused");
+        verify_sort(&graph);
+    }
+
+    #[test]
+    fn memory_ops() {
+        init_logger();
+        let mut memory = Memory::new();
+        assert_eq!(
+            memory.read(0, 8),
+            WireValue { bits: u128::new(0), width: WireWidth::Bits(64) }
+        );
+        assert_eq!(
+            memory.read(1, 8),
+            WireValue { bits: u128::new(0), width: WireWidth::Bits(64) }
+        );
+        assert_eq!(
+            memory.read(9, 4),
+            WireValue { bits: u128::new(0), width: WireWidth::Bits(32) }
+        );
+        memory.write(1, u128::new(0x0123456789ABCDEF), 8);
+        assert_eq!(
+            memory.read(5, 4),
+            WireValue { bits: u128::new(0x01234567), width: WireWidth::Bits(32) }
+        );
+        assert_eq!(
+            memory.read(3, 2),
+            WireValue { bits: u128::new(0x89AB), width: WireWidth::Bits(16) }
+        );
     }
 }
