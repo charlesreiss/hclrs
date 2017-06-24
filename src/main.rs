@@ -31,20 +31,22 @@ use std::sync::{Once, ONCE_INIT};
 use errors::Error;
 
 fn main() {
+    env_logger::init().unwrap();
     main_real().unwrap();
 }
 
 fn main_real() -> Result<(), Error> {
     let args: Vec<String> = env::args().collect();
     let mut filename: String = String::from("/dev/stdin");
+    let mut yo_filename: Option<String> = None;
     match args.len() {
-        1 => {
-            println!("Usage: hclrs FILENAME");
-            return Ok(());
-        },
         2 => filename = args[1].clone(),
+        3 => {
+            filename = args[1].clone();
+            yo_filename = Some(args[2].clone());
+        },
         _ => {
-            println!("Usage: hclrs FILENAME");
+            println!("Usage: hclrs FILENAME [MEMORY-IMAGE]");
             return Ok(());
         },
     }
@@ -63,6 +65,15 @@ fn main_real() -> Result<(), Error> {
 
     let program = Program::new_y86(statements)?;
     let mut running_program = RunningProgram::new_y86(program);
+
+    if let Some(filename) = yo_filename {
+        let yo_file = File::open(Path::new(&filename))?;
+        let mut yo_reader = BufReader::new(yo_file);
+        debug!("about to load yo file");
+        running_program.load_memory_y86(&mut yo_reader);
+    } else {
+        debug!("no yo file");
+    }
 
     while !running_program.done() && running_program.cycle() < 100 {
         try!(running_program.step());

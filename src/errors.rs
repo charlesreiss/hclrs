@@ -31,6 +31,8 @@ pub enum Error {
     UnterminatedComment(Loc),
     LexicalError(Loc),
     IoError(io::Error),
+    EmptyFile(),
+    UnparseableLine(String),
     MultipleErrors(Vec<Error>),
     // FIXME: multiple errors?
 }
@@ -65,6 +67,8 @@ impl error::Error for Error {
             Error::UnterminatedComment(_) => "unterminated /*-style comment",
             Error::LexicalError(_) => "unrecognized token",
             Error::IoError(_) => "an I/O error occurred",
+            Error::EmptyFile() => "empty input file",
+            Error::UnparseableLine(_) => "unparseable line in input file",
             Error::MultipleErrors(_) => "multiple errors",
         }
     }

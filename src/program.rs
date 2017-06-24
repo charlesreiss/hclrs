@@ -9,7 +9,7 @@ use std::collections::btree_map::BTreeMap;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::io::Write;
+use std::io::{BufRead, Write};
 
 struct Graph<T> {
     edges: HashMap<T, HashSet<T>>,
@@ -715,6 +715,65 @@ impl Memory {
         Memory { data: BTreeMap::new() }
     }
 
+    fn load_line_y86(&mut self, expect_loc: u64, line: &str) -> Result<u64, ()> {
+        debug!("processing line from yo file {}", line);
+        if &line[0..2] == "0x" && &line[5..7] == ": " && &line[27..29] == " |" {
+            if let Ok(loc) = u64::from_str_radix(&line[2..5], 16) {
+                if loc != expect_loc {
+                    debug!("loc {} disagreed with expected {}", loc, expect_loc);
+                    return Err(());
+                }
+                let mut loc = loc;
+                let hex_chars = &line[7..26];
+                let mut i = 0;
+                while i < hex_chars.len() && &hex_chars[i..(i+1)] != " " {
+                    if let Ok(byte) = u8::from_str_radix(&hex_chars[i..(i+2)], 16) {
+                        self.data.insert(loc, byte);
+                        debug!("loaded {:x} -> {:x}", byte, loc);
+                        loc += 1;
+                        i += 2;
+                    } else {
+                        debug!("non-hexadecimal data {}", &hex_chars[i..(i+2)]);
+                        return Err(());
+                    }
+                }
+                return Ok(loc);
+            } else {
+                debug!("bad address 0x{}", &line[2..5]);
+                return Err(());
+            }
+        } else if line.contains("|") {
+            // assume this is meant to contain data
+            debug!("found pipe, but not other parts of yas format");
+            return Err(());
+        } else {
+            debug!("ignoring line {}", line);
+            return Ok(expect_loc);
+        }
+    }
+
+    pub fn load_from_y86<R: BufRead>(&mut self, reader: &mut R) -> Result<(), Error> {
+        /* 0x000: 30f40001000000000000 |     irmovq $256, %rsp */
+        /* 01234567890123456789012345678 */
+        /*           1111111111222222222 */
+        let mut found_something = false;
+        let mut next_loc: u64 = 0x0;
+        for maybe_line in reader.lines() {
+            let line = maybe_line?;
+            if let Ok(new_loc) = self.load_line_y86(next_loc, &line) {
+                found_something = true;
+                next_loc = new_loc;
+            } else {
+                return Err(Error::UnparseableLine(String::from(line)));
+            }
+        }
+        if !found_something {
+            return Err(Error::EmptyFile());
+        }
+        debug!("after loading from yo file: {} items", self.data.len());
+        Ok(())
+    }
+
     pub fn read(&self, address: u64, bytes: u8) -> WireValue {
         assert!(bytes <= 16);
         let mut result = u128::new(0);
@@ -780,6 +839,10 @@ impl RunningProgram {
             last_status: None,
             timeout: u32::max_value(),
         }
+    }
+    
+    pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) {
+        self.memory.load_from_y86(reader);
     }
 
     pub fn new_y86(program: Program) -> RunningProgram {
@@ -968,9 +1031,11 @@ impl RunningProgram {
         writeln!(result,   "| used memory:   _0 _1 _2 _3  _4 _5 _6 _7   _8 _9 _a _b  _c _d _e _f    |");
         let mut cur_addr: u64 = 0;
         for (&k, &v) in &self.memory.data {
+            debug!("found memory {:x}={:x}", k, v);
             while cur_addr <= k {
+                debug!("output addr {:x}", cur_addr);
                 if cur_addr % 16 == 0 {
-                    write!(result, "\n|    {:07x}:  ", cur_addr);
+                    write!(result, "|     {:07x}:  ", cur_addr);
                 }
                 if cur_addr == k {
                     write!(result, " {:02x}", v);
@@ -985,7 +1050,7 @@ impl RunningProgram {
                 if cur_addr % 16 == 15 {
                     write!(result, "    |\n");
                     /* potentially skip ahead */
-                    if k != cur_addr {
+                    if k > cur_addr {
                         cur_addr = (k >> 4) << 4;
                     } else {
                         cur_addr += 1;
@@ -1002,6 +1067,7 @@ impl RunningProgram {
                 7 => write!(result, "     "),
                 _ => write!(result, "   "),
             };
+            cur_addr += 1;
         }
     }
 
@@ -1029,6 +1095,7 @@ impl RunningProgram {
         }
         self.dump_program_registers_y86(&mut result);
         self.dump_custom_registers_y86(&mut result);
+        self.dump_memory_y86(&mut result);
         if self.halted() {
             writeln!(result,
                 "+--------------------- (end of halted state) ---------------------------+"
