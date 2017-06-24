@@ -36,6 +36,12 @@ impl FromStr for WireWidth {
 }
 
 impl WireWidth {
+    pub fn bits_or_128(&self) -> u8 {
+        match *self {
+            WireWidth::Bits(x) => x,
+            _ => 128,
+        }
+    }
     fn bits_or(self, s: u8) -> u8 {
         match self {
             WireWidth::Bits(t) => t,
