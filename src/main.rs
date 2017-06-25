@@ -1,43 +1,38 @@
-#[macro_use]
-extern crate log;
 extern crate env_logger;
-
-extern crate lalrpop_util;
-extern crate extprim;
-
-mod parser;
-mod ast;
-mod program;
-mod errors;
-mod lexer;
-#[cfg(test)]
-mod tests;
-
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, stderr};
 use std::path::Path;
-use parser::parse_Statements;
-use program::{Program, RunningProgram};
-use lexer::Lexer;
 
-use errors::Error;
+extern crate hclrs;
+
+use hclrs::*;
 
 fn main() {
     env_logger::init().unwrap();
+    // FIXME: real error messages
     main_real().unwrap();
+}
+
+fn run_y86(file_contents: &FileContents, yo_path: &Path) -> Result<(), Error> {
+    let program = parse_y86_hcl(file_contents)?;
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut yo_reader = BufReader::new(File::open(yo_path)?);
+    running_program.load_memory_y86(&mut yo_reader)?;
+    running_program.run()?;
+    println!("{}", running_program.dump_y86_str());
+    Ok(())
 }
 
 fn main_real() -> Result<(), Error> {
     let args: Vec<String> = env::args().collect();
     let filename: String;
-    let mut yo_filename: Option<String> = None;
+    let yo_filename: String;
     // FIXME -i, -d flags, timeout, default timeout
     match args.len() {
-        2 => filename = args[1].clone(),
         3 => {
             filename = args[1].clone();
-            yo_filename = Some(args[2].clone());
+            yo_filename = args[2].clone();
         },
         _ => {
             println!("Usage: hclrs FILENAME [MEMORY-IMAGE]");
@@ -46,33 +41,12 @@ fn main_real() -> Result<(), Error> {
     }
 
     let path = Path::new(&filename);
-
-    let file = File::open(path)?;
-    let mut file_reader = BufReader::new(file);
-    let mut contents = String::new();
-    try!(file_reader.read_to_string(&mut contents));
-
-    // FIXME: wrapping for ParseErrors (has lifetime issues)
-    let mut errors = Vec::new();
-    let lexer = Lexer::new(contents.as_str());
-    let statements = parse_Statements(&mut errors, lexer).unwrap();
-
-    let program = Program::new_y86(statements)?;
-    let mut running_program = RunningProgram::new_y86(program);
-
-    if let Some(filename) = yo_filename {
-        let yo_file = File::open(Path::new(&filename))?;
-        let mut yo_reader = BufReader::new(yo_file);
-        debug!("about to load yo file");
-        running_program.load_memory_y86(&mut yo_reader)?;
-    } else {
-        debug!("no yo file");
+    let file_contents = read_y86_hcl(path)?;
+    let yo_path = Path::new(&yo_filename);
+    match run_y86(&file_contents, yo_path) {
+        Err(e) => format_error(&mut stderr(), &file_contents, &e)?,
+        _ => {},
     }
-
-    while !running_program.done() && running_program.cycle() < 100 {
-        try!(running_program.step());
-    }
-    println!("{}", running_program.dump_y86_str());
     Ok(())
 }
 

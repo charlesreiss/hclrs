@@ -1,11 +1,14 @@
 use ast::{WireValue, WireWidth};
 use std::str::CharIndices;
 use extprim::u128::u128;
+
 use errors::Error;
+use io::FileContents;
 
 pub type Spanned<T, E> = Result<(usize, T, usize), E>;
 
 pub type Loc = usize;
+pub type Span = (Loc, Loc);
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Tok<'input> {
@@ -26,73 +29,6 @@ pub enum Tok<'input> {
     Identifier(&'input str),
 }
 
-// FIXME: untested code; use this to make good error messages
-pub struct FileContents<'input> {
-    data: &'input str,
-    filenames: Vec<(usize, String)>,
-    newlines: Vec<(usize, usize)>,
-}
-
-impl<'input> FileContents<'input> {
-    pub fn data(&self) -> &'input str { self.data }
-
-    pub fn filename(&self, index: usize) -> &str {
-        let index = match self.filenames.binary_search_by_key(&index, |ref x| x.0) {
-            Ok(x) => x,
-            Err(x) => x - 1
-        };
-        &self.filenames[index].1
-    }
-
-    pub fn line_number_and_bounds(&self, index: usize) -> (usize, usize, usize) {
-        let index = match self.newlines.binary_search_by_key(&index, |ref x| x.0) {
-            Ok(x) => x,
-            Err(x) => x - 1
-        };
-        let next_line_loc = if index == self.newlines.len() - 1 { self.data.len() } else { self.newlines[index + 1].0 };
-        let cur_line = self.newlines[index];
-        (cur_line.1, cur_line.0, next_line_loc)
-    }
-
-    pub fn line(&self, index: usize) -> usize {
-        self.line_number_and_bounds(index).1
-    }
-
-    pub fn file_and_line(&self, index: usize) -> String {
-        let filename = self.filename(index);
-        let line = self.line(index);
-        format!("{}:{}", filename, line)
-    }
-
-    pub fn range(&self, start: usize, end: usize) -> String {
-        let filename = self.filename(start);
-        let start_line = self.line(start);
-        let end_line = self.line(start);
-        if start_line == end_line {
-            format!("{}:{}", filename, start_line)
-        } else {
-            format!("{}:{}-{}", filename, start_line, end_line)
-        }
-    }
-
-    pub fn show_region(&self, start: usize, end: usize) -> String {
-        let filename = self.filename(start);
-        let (begin_line_no, begin_loc, _) = self.line_number_and_bounds(start);
-        let (_, _, end_loc) = self.line_number_and_bounds(end);
-        let segment = &self.data[begin_loc..end_loc];
-        let mut result = String::new();
-        // FIXME: variable width line count
-        result.push_str(&format!("     -> {}:{}\n", filename, begin_line_no));
-        result.push_str(         "     |\n");
-        let mut number = begin_line_no;
-        for line in segment.lines() {
-            result.push_str(&format!("{:4} | {}\n", number, line));
-            number += 1;
-        }
-        result
-    }
-}
-
 pub struct Lexer<'input> {
     input: &'input str,
     chars: CharIndices<'input>,
@@ -101,6 +37,10 @@ pub struct Lexer<'input> {
 }
 
 impl<'input> Lexer<'input> {
+    pub fn new_for_file(input: &'input FileContents) -> Self {
+        Lexer::new(input.data())
+    }
+
     pub fn new(input: &'input str) -> Self {
         Lexer { input: input, chars: input.char_indices(), pending: None, last: None }
     }
@@ -208,7 +148,7 @@ impl<'input> Lexer<'input> {
                             return Ok((start, Tok::Constant(WireValue::new(value)), end));
                         }
                         Err(_) => {
-                            return Err(Error::InvalidConstant(start, end));
+                            return Err(Error::InvalidConstant((start, end)));
                         }
                     }
                 },
@@ -223,7 +163,7 @@ impl<'input> Lexer<'input> {
                             return Ok((start, Tok::Constant(WireValue::new(value).as_width(width)), end));
                         }
                         Err(_) => {
-                            return Err(Error::InvalidConstant(start, end));
+                            return Err(Error::InvalidConstant((start, end)));
                         }
                     }
                 }
@@ -235,7 +175,7 @@ impl<'input> Lexer<'input> {
                             return Ok((start, Tok::Constant(WireValue::new(value)), end));
                         }
                         Err(_) => {
-                            return Err(Error::InvalidConstant(start, end));
+                            return Err(Error::InvalidConstant((start, end)));
                         }
                     }
                 },
@@ -249,7 +189,7 @@ impl<'input> Lexer<'input> {
                             return Ok((start, Tok::Constant(WireValue::new(value)), end));
                         }
                         Err(_) => {
-                            return Err(Error::InvalidConstant(start, end));
+                            return Err(Error::InvalidConstant((start, end)));
                         }
                     }
                 },
@@ -263,7 +203,7 @@ impl<'input> Lexer<'input> {
                     return Ok((start, Tok::Constant(WireValue::new(value)), end));
                 }
                 Err(_) => {
-                    return Err(Error::InvalidConstant(start, end));
+                    return Err(Error::InvalidConstant((start, end)));
                 }
             }
         }

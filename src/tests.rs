@@ -12,7 +12,7 @@ extern crate env_logger;
 static TEST_LOGGER_ONCE: Once = ONCE_INIT;
 
 type ParseErrorType<'input> = ParseError<usize, Tok<'input>, Error>;
-type ErrorRecoveryType<'input> = ErrorRecovery<usize, (usize, &'input str), Error>;
+type ErrorRecoveryType<'input> = ErrorRecovery<usize, Tok<'input>, Error>;
 
 pub fn init_logger() {
     TEST_LOGGER_ONCE.call_once(|| {

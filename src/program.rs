@@ -1,8 +1,6 @@
 use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, Expr};
-use parser::parse_Statements;
 use extprim::u128::u128;
 use errors::Error;
-use lexer::Lexer;
 use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
 use std::collections::btree_map::BTreeMap;
@@ -415,8 +413,7 @@ fn assignments_to_actions<'a>(
     return Ok(result);
 }
 
-fn y86_preamble() -> Vec<Statement> {
-    let preamble_text = "
+pub const Y86_PREAMBLE: &'static str = "
 const STAT_BUB = 0b000, STAT_AOK = 0b001, STAT_HLT = 0b010;  # expected behavior
 const STAT_ADR = 0b011, STAT_INS = 0b100, STAT_PIP = 0b110;  # error conditions
 
@@ -436,17 +433,9 @@ const ALWAYS = 0b0000, LE   = 0b0001, LT   = 0b0010, EQ   = 0b0011;
 const NE     = 0b0100, GE   = 0b0101, GT   = 0b0110;
 const ADDQ   = 0b0000, SUBQ = 0b0001, ANDQ = 0b0010, XORQ = 0b0011;
 ";
-    let mut errors = Vec::new();
-    // FIXME: adjust locations somehow
-    let result = parse_Statements(&mut errors, Lexer::new(preamble_text)).unwrap();
-    assert_eq!(errors.len(), 0);
-    result
-}
 
 impl Program {
     pub fn new_y86(statements: Vec<Statement>) -> Result<Program, Error> {
-        let mut statements = statements;
-        statements.extend(y86_preamble());
         Program::new(statements, y86_fixed_functions())
     }
 
@@ -776,14 +765,25 @@ impl RunningProgram {
             registers: registers,
             zero_register: zero_register,
             last_status: None,
-            timeout: u32::max_value(),
+            timeout: 1000,
         }
+    }
+
+    pub fn set_timeout(&mut self, new_timeout: u32) {
+        self.timeout = new_timeout;
+    }
+
+    pub fn run(&mut self) -> Result<(), Error> {
+        while !self.done() {
+            self.step()?;
+        }
+        Ok(())
     }
 
     pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) -> Result<(), Error> {
         self.memory.load_from_y86(reader)
     }
-
+    
     pub fn new_y86(program: Program) -> RunningProgram {
         RunningProgram::new(
             program,

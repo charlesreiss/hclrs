@@ -5,7 +5,7 @@ use lexer::Tok;
 use lalrpop_util::{ErrorRecovery, ParseError};
 
 // ErrorRecovery< locationType, tokenType, errorType >
-grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), Error>>);
+grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize, Tok<'input>, Error>>);
 
 extern {
     type Location = usize;
@@ -63,7 +63,7 @@ WidthConstant : WireWidth = {
         if constant.bits <= u128::new(128) {
             Ok(WireWidth::Bits(constant.bits.low64() as u8))
         } else {
-            Err(ParseError::User { error: Error::InvalidWireWidth(start, end) })
+            Err(ParseError::User { error: Error::InvalidWireWidth((start, end)) })
         }
     },
 };
@@ -73,7 +73,7 @@ SimpleConstant : u8 = {
         if constant.bits <= u128::new(128) {
             Ok(constant.bits.low64() as u8)
         } else {
-            Err(ParseError::User { error: Error::InvalidConstant(start, end) })
+            Err(ParseError::User { error: Error::InvalidConstant((start, end)) })
         }
     },
 };
