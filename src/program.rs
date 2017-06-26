@@ -360,7 +360,7 @@ fn assignments_to_actions<'a>(
     // functionality.
 
     // this makes doing something like setting reg_dstE without setting reg_inputE an error,
-    // but doesn't make something like setting mem_addr without
+    // but doesn't make something like setting mem_addr without mem_write an error
     {
         let mut missing_inputs = Vec::new();
         for name in unused_fixed_inputs {
