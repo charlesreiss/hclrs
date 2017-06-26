@@ -183,7 +183,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
             }),
             out_wire: Some(WireDecl {
                 name: String::from("i10bytes"),
-                width: WireWidth::from(64),
+                width: WireWidth::from(80),
             }),
             action: Action::ReadMemory {
                 is_read: None,
@@ -199,7 +199,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 width: WireWidth::from(64),
             },
             WireDecl {
-                name: String::from("mem_read"),
+                name: String::from("mem_readbit"),
                 width: WireWidth::from(1),
             }),
             out_wire: Some(WireDecl {
@@ -207,7 +207,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 width: WireWidth::from(64),
             }),
             action: Action::ReadMemory {
-                is_read: Some(String::from("mem_read")),
+                is_read: Some(String::from("mem_readbit")),
                 address: String::from("mem_addr"),
                 out_port: String::from("mem_output"),
                 bytes: 8
@@ -226,13 +226,13 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                     width: WireWidth::Bits(64),
                 },
                 WireDecl {
-                    name: String::from("mem_write"),
+                    name: String::from("mem_writebit"),
                     width: WireWidth::Bits(1),
                 }
             ),
             out_wire: None,
             action: Action::WriteMemory {
-                is_write: Some(String::from("mem_write")),
+                is_write: Some(String::from("mem_writebit")),
                 address: String::from("mem_addr"),
                 in_port: String::from("mem_input"),
                 bytes: 8,
@@ -360,7 +360,7 @@ fn assignments_to_actions<'a>(
     // functionality.
 
     // this makes doing something like setting reg_dstE without setting reg_inputE an error,
-    // but doesn't make something like setting mem_addr without mem_write an error
+    // but doesn't make something like setting mem_addr without mem_writebit an error
     {
         let mut missing_inputs = Vec::new();
         for name in unused_fixed_inputs {
@@ -383,6 +383,7 @@ fn assignments_to_actions<'a>(
         debug!("using order {:?}", sorted);
         let mut covered = known_values.clone();
         for name in sorted {
+            debug!("processing {:?}", name);
             match assignments.get(name) {
                 Some(expr) => {
                     for in_name in expr.referenced_wires() {
@@ -402,11 +403,17 @@ fn assignments_to_actions<'a>(
                     }
                 },
                 None => {
-                    let fixed = fixed_by_output.get(name).unwrap();
-                    for in_name in &fixed.in_wires {
-                        assert!(covered.contains(in_name.name.as_str()));
+                    match fixed_by_output.get(name) {
+                        Some(fixed) => {
+                            for in_name in &fixed.in_wires {
+                                assert!(covered.contains(in_name.name.as_str()));
+                            }
+                            result.push(fixed.action.clone());
+                        },
+                        None => {
+                            return Err(Error::UndefinedWire(String::from(name)));
+                        }
                     }
-                    result.push(fixed.action.clone());
                 }
             }
             covered.insert(name);
@@ -441,6 +448,9 @@ const CMOVXX = RRMOVQ;
 const ALWAYS = 0b0000, LE   = 0b0001, LT   = 0b0010, EQ   = 0b0011;
 const NE     = 0b0100, GE   = 0b0101, GT   = 0b0110;
 const ADDQ   = 0b0000, SUBQ = 0b0001, ANDQ = 0b0010, XORQ = 0b0011;
+
+const true = 1;
+const false = 0;
 ";
 
 impl Program {

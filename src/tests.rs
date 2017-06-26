@@ -297,8 +297,8 @@ fn memory_program() {
     let mut errors = Vec::new();
     let statements = parse_Statements_str(&mut errors,
         "register xX { count: 64 = 1; }
-        mem_read = X_count & 1 == 1;
-        mem_write = !mem_read;
+        mem_readbit = X_count & 1 == 1;
+        mem_writebit = !mem_readbit;
         mem_addr = 0x8 + X_count;
         mem_input = 0x0123456789ABCDEF;
         x_count = X_count + 1;

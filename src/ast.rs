@@ -194,6 +194,7 @@ impl BinOpCode {
             BinOpCode::GreaterEqual => BinOpKind::Boolean,
             BinOpCode::Less => BinOpKind::Boolean,
             BinOpCode::Greater => BinOpKind::Boolean,
+            BinOpCode::NotEqual => BinOpKind::Boolean,
             _ => BinOpKind::EqualWidth,
         }
     }
