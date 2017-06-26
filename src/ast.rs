@@ -86,6 +86,10 @@ pub struct WireValue {
 }
 
 impl WireValue {
+    pub fn true_value() -> WireValue {
+        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
+    }
+
     pub fn false_value() -> WireValue {
         WireValue { bits: u128::new(0), width: WireWidth::Bits(1) }
     }
@@ -279,6 +283,7 @@ pub enum Expr {
     NamedWire(String),
     BitSelect { from: Box<Expr>, low: u8, high: u8 },
     Concat(Box<Expr>, Box<Expr>),
+    InSet(Box<Expr>, Vec<Expr>),
 }
 
 pub type WireValues = HashMap<String, WireValue>;
@@ -341,7 +346,19 @@ impl Expr {
                 } else {
                     Err(Error::NoBitWidth((**left).clone()))
                 }
-            }
+            },
+            Expr::InSet(ref left, ref lst) => {
+                let left_width = left.width(widths)?;
+                for item in lst {
+                    match left_width.combine(item.width(widths)?) {
+                        Some(_) => {},
+                        None => {
+                            return Err(Error::MismatchedExprWidths((**left).clone(), (*item).clone()));
+                        },
+                    }
+                }
+                Ok(WireWidth::Bits(1))
+            },
         }
     }
 
@@ -397,6 +414,16 @@ impl Expr {
                     Err(Error::NoBitWidth((**right).clone()))
                 }
             },
+            Expr::InSet(ref left, ref lst) => {
+                let left = left.evaluate(wires)?;
+                for item in lst {
+                    let right = item.evaluate(wires)?;
+                    if left.bits == right.bits {
+                        return Ok(WireValue::true_value());
+                    }
+                }
+                Ok(WireValue::false_value())
+            }
         }
     }
 
@@ -426,6 +453,12 @@ impl Expr {
                 left.accumulate_referenced_wires(set);
                 right.accumulate_referenced_wires(set);
             },
+            Expr::InSet(ref left, ref lst) => {
+                left.accumulate_referenced_wires(set);
+                for ref item in lst {
+                    item.accumulate_referenced_wires(set);
+                }
+            }
         }
     }
 

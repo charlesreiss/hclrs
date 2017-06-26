@@ -119,9 +119,10 @@ pub enum Action {
 }
 
 // psuedo-assignment for fixed functionality
+#[derive(Debug)]
 pub struct FixedFunction {
     in_wires: Vec<WireDecl>,
-    out_wire: Option<String>,
+    out_wire: Option<WireDecl>,
     action: Action,
     mandatory: bool,
 }
@@ -129,8 +130,11 @@ pub struct FixedFunction {
 impl FixedFunction {
     fn read_port(number: &str, output: &str) -> FixedFunction {
         FixedFunction {
-            in_wires: vec!(WireDecl { name: String::from(number), width: WireWidth::Bits(4) }),
-            out_wire: Some(String::from(output)),
+            in_wires: vec!(WireDecl { name: String::from(number), width: WireWidth::from(4) }),
+            out_wire: Some(WireDecl {
+                name: String::from(output),
+                width: WireWidth::from(64),
+            }),
             action: Action::ReadProgramRegister {
                 number: String::from(number),
                 out_port: String::from(output),
@@ -175,9 +179,12 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
         FixedFunction {
             in_wires: vec!(WireDecl {
                 name: String::from("pc"),
-                width: WireWidth::Bits(64),
+                width: WireWidth::from(64),
             }),
-            out_wire: Some(String::from("i10bytes")),
+            out_wire: Some(WireDecl {
+                name: String::from("i10bytes"),
+                width: WireWidth::from(64),
+            }),
             action: Action::ReadMemory {
                 is_read: None,
                 address: String::from("pc"),
@@ -189,13 +196,16 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
         FixedFunction {
             in_wires: vec!(WireDecl {
                 name: String::from("mem_addr"),
-                width: WireWidth::Bits(64),
+                width: WireWidth::from(64),
             },
             WireDecl {
                 name: String::from("mem_read"),
-                width: WireWidth::Bits(1),
+                width: WireWidth::from(1),
             }),
-            out_wire: Some(String::from("mem_output")),
+            out_wire: Some(WireDecl {
+                name: String::from("mem_output"),
+                width: WireWidth::from(64),
+            }),
             action: Action::ReadMemory {
                 is_read: Some(String::from("mem_read")),
                 address: String::from("mem_addr"),
@@ -290,9 +300,6 @@ fn assignments_to_actions<'a>(
         graph.add_node(*name);
         for in_name in expr.referenced_wires() {
             if !known_values.contains(in_name) {
-                if !assignments.contains_key(in_name) {
-                    return Err(Error::UndefinedWire(String::from(in_name)));
-                }
                 graph.insert(in_name, name);
             }
         }
@@ -314,8 +321,8 @@ fn assignments_to_actions<'a>(
             let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(String::from(*x))).collect();
             return Err(Error::MultipleErrors(missing_list));
         } else if missing_inputs.len() > 0 {
-            if let Some(ref name) = fixed.out_wire {
-                if graph.contains_node(&name.as_str()) {
+            if let Some(ref decl) = fixed.out_wire {
+                if graph.contains_node(&decl.name.as_str()) {
                     let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(String::from(*x))).collect();
                     return Err(Error::MultipleErrors(missing_list));
                 }
@@ -327,21 +334,22 @@ fn assignments_to_actions<'a>(
                     }
                 }
             }
+            debug!("not initializing {:?} due to missing inputs", fixed);
             continue;
         }
         match fixed.out_wire {
             None => {
                 fixed_no_output.push(fixed);
             },
-            Some(ref name) => {
-                if known_values.contains(name.as_str()) ||
-                   assignments.contains_key(name.as_str()) {
-                    return Err(Error::RedefinedBuiltinWire(name.clone()));
+            Some(ref decl) => {
+                if known_values.contains(decl.name.as_str()) ||
+                   assignments.contains_key(decl.name.as_str()) {
+                    return Err(Error::RedefinedBuiltinWire(decl.name.clone()));
                 }
-                fixed_by_output.insert(name.as_str(), fixed);
+                fixed_by_output.insert(decl.name.as_str(), fixed);
                 for in_name in &fixed.in_wires {
                     used_fixed_inputs.insert(in_name.name.as_str());
-                    graph.insert(in_name.name.as_str(), name.as_str());
+                    graph.insert(in_name.name.as_str(), decl.name.as_str());
                 }
             }
         }
@@ -372,6 +380,7 @@ fn assignments_to_actions<'a>(
 
     if let Ok(sorted) = graph.topological_sort() {
         // FIXME: covered is just a sanity-check, should be removeable
+        debug!("using order {:?}", sorted);
         let mut covered = known_values.clone();
         for name in sorted {
             match assignments.get(name) {
@@ -565,6 +574,15 @@ impl Program {
                 wires.insert(bank.bubble_signal.as_str(), WireWidth::Bits(1));
             }
 
+            for fixed in &fixed_functions {
+                for decl in &fixed.out_wire {
+                    if wires.contains_key(decl.name.as_str()) {
+                        return Err(Error::RedefinedBuiltinWire(decl.name.clone()));
+                    }
+                    wires.insert(decl.name.as_str(), decl.width);
+                }
+            }
+
             // Step 4: Check for missing wires
             for name in needed_wires {
                 if !assignments.contains_key(name) {
@@ -648,11 +666,10 @@ impl Memory {
         if &line[0..2] == "0x" && &line[5..7] == ": " && &line[27..29] == " |" {
             if let Ok(loc) = u64::from_str_radix(&line[2..5], 16) {
                 if loc != expect_loc {
-                    debug!("loc {} disagreed with expected {}", loc, expect_loc);
-                    return Err(());
+                    debug!("loc {} from natural loc {}", loc, expect_loc);
                 }
                 let mut loc = loc;
-                let hex_chars = &line[7..26];
+                let hex_chars = &line[7..27];
                 let mut i = 0;
                 while i < hex_chars.len() && &hex_chars[i..(i+1)] != " " {
                     if let Ok(byte) = u8::from_str_radix(&hex_chars[i..(i+2)], 16) {
@@ -670,7 +687,7 @@ impl Memory {
                 debug!("bad address 0x{}", &line[2..5]);
                 return Err(());
             }
-        } else if line.contains("|") {
+        } else if line.contains("|") && !line.starts_with("                            |") {
             // assume this is meant to contain data
             debug!("found pipe, but not other parts of yas format");
             return Err(());
@@ -733,7 +750,53 @@ impl Memory {
         }
     }
 
-    // FIXME: iteration for output
+    fn dump_memory_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
+        writeln!(result,   "| used memory:   _0 _1 _2 _3  _4 _5 _6 _7   _8 _9 _a _b  _c _d _e _f    |")?;
+        if self.data.len() == 0 {
+            return Ok(());
+        }
+        let mut cur_addr: u64 = *self.data.iter().next().unwrap().0;
+        for (&k, &v) in &self.data {
+            debug!("found memory {:x}={:x}", k, v);
+            while cur_addr <= k {
+                debug!("output addr {:x}", cur_addr);
+                if cur_addr % 16 == 0 {
+                    write!(result, "|  0x{:07x}_:  ", cur_addr >> 4)?;
+                }
+                if cur_addr == k {
+                    write!(result, " {:02x}", v)?;
+                } else {
+                    write!(result, "   ")?;
+                }
+                match cur_addr % 16 {
+                    3 | 11 => {write!(result, " ")?;},
+                    7 => {write!(result, "  ")?;},
+                    _ => {},
+                }
+                if cur_addr % 16 == 15 {
+                    write!(result, "    |\n")?;
+                    /* potentially skip ahead */
+                    if k > cur_addr {
+                        cur_addr = (k >> 4) << 4;
+                    } else {
+                        cur_addr += 1;
+                    }
+                }  else {
+                    cur_addr += 1;
+                }
+            }
+        }
+        while cur_addr % 16 != 0 {
+            match cur_addr % 16 {
+                15 => write!(result, "       |\n")?,
+                3 | 11 => write!(result, "    ")?,
+                7 => write!(result, "     ")?,
+                _ => write!(result, "   ")?,
+            };
+            cur_addr += 1;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -747,6 +810,15 @@ pub struct RunningProgram {
     last_status: Option<u8>,
     timeout: u32,
 }
+
+const Y86_STATUSES: [&'static str; 6] = [
+    "0 (Bubble)",
+    "1 (OK)",
+    "2 (Halt)",
+    "3 (Invalid Address)",
+    "4 (Invalid Instruction)",
+    "5 (Pipeline Error)"
+];
 
 impl RunningProgram {
     pub fn new(program: Program,
@@ -783,7 +855,7 @@ impl RunningProgram {
     pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) -> Result<(), Error> {
         self.memory.load_from_y86(reader)
     }
-    
+
     pub fn new_y86(program: Program) -> RunningProgram {
         RunningProgram::new(
             program,
@@ -872,13 +944,18 @@ impl RunningProgram {
         Ok(())
     }
 
+    pub fn status_or_default(&self, default: u8) -> u8 {
+        let value = self.values.get("Stat").unwrap_or(&WireValue::from_u64(default as u64)).bits;
+        value.low64() as u8
+    }
+
     // FIXME: hard-coded Y86 status codes
     pub fn done(&self) -> bool {
-        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)).bits != u128::new(1) || self.cycle > self.timeout
+        self.status_or_default(1) != 1 || self.cycle > self.timeout
     }
 
     pub fn halted(&self) -> bool {
-        self.values.get("Stat").unwrap_or(&WireValue::from_u64(1)).bits == u128::new(2)
+        self.status_or_default(1) == 2
     }
 
     pub fn timed_out(&self) -> bool {
@@ -920,7 +997,7 @@ impl RunningProgram {
                 line_loc = 2;
             }
             let value = self.values.get(&signal.1).unwrap().bits;
-            write!(result, " {}={:hex_width$x}", name, value, hex_width=hex_width)?;
+            write!(result, " {}={:0hex_width$x}", name, value, hex_width=hex_width)?;
             line_loc += 2 + hex_width + name.len();
         }
         if line_loc + 2 >= max_loc {
@@ -968,52 +1045,16 @@ impl RunningProgram {
         Ok(())
     }
 
-    fn dump_memory_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
-        writeln!(result,   "| used memory:   _0 _1 _2 _3  _4 _5 _6 _7   _8 _9 _a _b  _c _d _e _f    |")?;
-        let mut cur_addr: u64 = 0;
-        for (&k, &v) in &self.memory.data {
-            debug!("found memory {:x}={:x}", k, v);
-            while cur_addr <= k {
-                debug!("output addr {:x}", cur_addr);
-                if cur_addr % 16 == 0 {
-                    write!(result, "|     {:07x}:  ", cur_addr)?;
-                }
-                if cur_addr == k {
-                    write!(result, " {:02x}", v)?;
-                } else {
-                    write!(result, "   ")?;
-                }
-                match cur_addr % 16 {
-                    3 | 11 => {write!(result, " ")?;},
-                    7 => {write!(result, "  ")?;},
-                    _ => {},
-                }
-                if cur_addr % 16 == 15 {
-                    write!(result, "    |\n")?;
-                    /* potentially skip ahead */
-                    if k > cur_addr {
-                        cur_addr = (k >> 4) << 4;
-                    } else {
-                        cur_addr += 1;
-                    }
-                }  else {
-                    cur_addr += 1;
-                }
-            }
+    pub fn name_status_y86(&self) -> &'static str {
+        let status = self.status_or_default(255);
+        if (status as usize) < Y86_STATUSES.len() {
+            Y86_STATUSES[status as usize]
+        } else {
+            "<unknown>"
         }
-        while cur_addr % 16 != 0 {
-            match cur_addr % 16 {
-                15 => write!(result, "      |\n")?,
-                3 | 11 => write!(result, "     ")?,
-                7 => write!(result, "     ")?,
-                _ => write!(result, "   ")?,
-            };
-            cur_addr += 1;
-        }
-        Ok(())
     }
 
-    pub fn dump_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
+    pub fn dump_y86<W: Write>(&self, result: &mut W, include_register_banks: bool) -> Result<(), Error> {
         if self.halted() {
             writeln!(result,
                 "+----------------------- halted in state: ------------------------------+"
@@ -1034,8 +1075,10 @@ impl RunningProgram {
             )?;
         }
         self.dump_program_registers_y86(result)?;
-        self.dump_custom_registers_y86(result)?;
-        self.dump_memory_y86(result)?;
+        if include_register_banks {
+            self.dump_custom_registers_y86(result)?;
+        }
+        self.memory.dump_memory_y86(result)?;
         if self.halted() {
             writeln!(result,
                 "+--------------------- (end of halted state) ---------------------------+"
@@ -1049,12 +1092,18 @@ impl RunningProgram {
                 "+-----------------------------------------------------------------------+"
             )?;
         }
+        if self.done() {
+            writeln!(result, "Cycles run: {}", self.cycle)?;
+            if !self.halted() && !self.timed_out() {
+                writeln!(result, "Error code: {}", self.name_status_y86())?;
+            }
+        }
         Ok(())
     }
 
-    pub fn dump_y86_str(&self) -> String {
+    pub fn dump_y86_str(&self, include_register_banks: bool) -> String {
         let mut result: Vec<u8> = Vec::new();
-        self.dump_y86(&mut result).expect("unexpected error while dumping state");
+        self.dump_y86(&mut result, include_register_banks).expect("unexpected error while dumping state");
         String::from_utf8_lossy(result.as_slice()).into_owned()
     }
 }

@@ -26,6 +26,7 @@ pub enum Tok<'input> {
     Wire,
     Const,
     Register,
+    In,
     Identifier(&'input str),
 }
 
@@ -215,6 +216,7 @@ impl<'input> Lexer<'input> {
             "wire" => Tok::Wire,
             "const" => Tok::Const,
             "register" => Tok::Register,
+            "in" => Tok::In,
             _ => Tok::Identifier(name),
         }
     }

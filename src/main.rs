@@ -20,7 +20,7 @@ fn run_y86(file_contents: &FileContents, yo_path: &Path) -> Result<(), Error> {
     let mut yo_reader = BufReader::new(File::open(yo_path)?);
     running_program.load_memory_y86(&mut yo_reader)?;
     running_program.run()?;
-    println!("{}", running_program.dump_y86_str());
+    println!("{}", running_program.dump_y86_str(true));
     Ok(())
 }
 

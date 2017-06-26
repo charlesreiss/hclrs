@@ -3,9 +3,15 @@ use program::{Program, RunningProgram};
 use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 use lexer::{Lexer, Tok};
 use errors::Error;
+use super::*;
 
 use extprim::u128::u128;
 use lalrpop_util::{ErrorRecovery, ParseError};
+
+use std::env;
+use std::fs::{File, read_dir};
+use std::io::{Read, BufReader};
+use std::path::{Path, PathBuf};
 use std::sync::{Once, ONCE_INIT};
 extern crate env_logger;
 
@@ -379,4 +385,62 @@ fn regfile_program() {
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("0").as_width(width64)));
     running_program.step().unwrap();
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("40").as_width(width64)));
+}
+
+fn expect_execute(hcl_path: &Path, yo_path: &Path, expect_output_path: &Path) {
+    debug!("expect_execute({:?}, {:?}, {:?})", hcl_path, yo_path, expect_output_path);
+    let file_contents = read_y86_hcl(hcl_path).unwrap();
+    let program = parse_y86_hcl(&file_contents).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut yo_reader = BufReader::new(File::open(yo_path).unwrap());
+    running_program.load_memory_y86(&mut yo_reader).unwrap();
+    running_program.run().unwrap();
+    let result = running_program.dump_y86_str(false);
+    let mut expect_output_reader = BufReader::new(File::open(expect_output_path).unwrap());
+    let mut expect_output = String::new();
+    expect_output_reader.read_to_string(&mut expect_output).unwrap();
+    assert_eq!(expect_output, result,
+        "reference:\n{}\nactual:\n{}\n", expect_output, result
+    );
+}
+
+fn check_hcl_with_references(hcl_path: &Path, reference_dir: &Path, yo_dir: &Path) {
+    for entry in read_dir(reference_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_name().to_str().unwrap().ends_with(".txt") {
+            let ref_path = entry.path();
+            let basename = ref_path.file_stem().unwrap();
+            let mut yo_file = String::from(basename.to_str().unwrap());
+            yo_file.push_str(".yo");
+            let yo_file = yo_dir.join(yo_file);
+            assert!(yo_file.is_file(), "{:?} is not file", yo_file);
+            expect_execute(hcl_path, yo_file.as_path(), ref_path.as_path());
+        }
+    }
+}
+
+fn check_reference_dir(dir: &Path) {
+    for entry in read_dir(dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_name().to_str().unwrap().ends_with(".hcl") {
+            let hcl_path = entry.path();
+            debug!("found hcl {:?}", hcl_path);
+            let basename = hcl_path.file_stem().unwrap();
+            let mut reference_dir = String::from(basename.to_str().unwrap());
+            reference_dir.push_str("-reference");
+            let reference_dir = hcl_path.with_file_name(reference_dir);
+            let yo_dir = hcl_path.with_file_name("y86");
+            check_hcl_with_references(hcl_path.as_path(), reference_dir.as_path(),
+                                      yo_dir.as_path())
+        }
+    }
+}
+
+#[test] #[ignore]
+fn external_reference() {
+    init_logger();
+    let mut dir = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).parent().unwrap().to_owned();
+    dir.push("hclrs-testdata");
+    assert!(dir.is_dir());
+    check_reference_dir(&dir);
 }

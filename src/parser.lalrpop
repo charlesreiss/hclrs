@@ -38,6 +38,7 @@ extern {
         "wire" => Tok::Wire,
         "const" => Tok::Const,
         "register" => Tok::Register,
+        "in" => Tok::In,
 
         ID => Tok::Identifier(<&'input str>),
     }
@@ -188,6 +189,10 @@ Term : Box<Expr> = {
 
 // public for testing
 pub Expr: Box<Expr> = {
+    <e:ExprLogicalOr> "in" "{" <l:Comma<Expr>> "}" => {
+        let v = l.into_iter().map(|x| *x).collect();
+        Box::new(Expr::InSet(e, v))
+    },
     ExprLogicalOr,
 };
 
