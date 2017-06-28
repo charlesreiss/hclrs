@@ -6,6 +6,8 @@ use extprim::u128::u128;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
 use std::convert::From;
+use std::fmt;
+use std::fmt::{Display, LowerHex, Formatter};
 use std::num::ParseIntError;
 use std::str::FromStr;
 
@@ -83,6 +85,18 @@ impl WireWidth {
 pub struct WireValue {
     pub bits: u128,
     pub width: WireWidth
+}
+
+impl Display for WireValue {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.bits)
+    }
+}
+
+impl LowerHex for WireValue {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{:x}", self.bits)
+    }
 }
 
 impl WireValue {
@@ -383,7 +397,7 @@ impl Expr {
                 let mut result: WireValue = WireValue::new(u128::new(0));
                 // FIXME: consider warning for using default?
                 for ref option in options {
-                    if try!(option.condition.evaluate(wires)).is_true() {
+                    if option.condition.evaluate(wires)?.is_true() {
                         result = try!(option.value.evaluate(wires));
                         break;
                     }

@@ -10,7 +10,7 @@ use lalrpop_util::{ErrorRecovery, ParseError};
 
 use std::env;
 use std::fs::{File, read_dir};
-use std::io::{Read, BufReader};
+use std::io::{Read, BufReader, stderr};
 use std::path::{Path, PathBuf};
 use std::sync::{Once, ONCE_INIT};
 extern crate env_logger;
@@ -394,7 +394,8 @@ fn expect_execute(hcl_path: &Path, yo_path: &Path, expect_output_path: &Path) {
     let mut running_program = RunningProgram::new_y86(program);
     let mut yo_reader = BufReader::new(File::open(yo_path).unwrap());
     running_program.load_memory_y86(&mut yo_reader).unwrap();
-    running_program.run().unwrap();
+    // FIXME: control with env var
+    running_program.run_with_trace(&mut stderr()).unwrap();
     let result = running_program.dump_y86_str(false);
     let mut expect_output_reader = BufReader::new(File::open(expect_output_path).unwrap());
     let mut expect_output = String::new();

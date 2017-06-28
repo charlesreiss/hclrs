@@ -7,7 +7,7 @@ use std::collections::btree_map::BTreeMap;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Write, sink};
 
 struct Graph<T> {
     edges: HashMap<T, HashSet<T>>,
@@ -739,7 +739,7 @@ impl Memory {
         while remaining > 0 {
             result |= u128::new(*self.data.get(&cur_addr).unwrap_or(&0) as u64) << ((total - remaining) * 8);
             debug!("reading {:#x}; accumulated result is {:#x}", cur_addr, result);
-            cur_addr += 1;
+            cur_addr = cur_addr.wrapping_add(1);
             remaining -= 1;
         }
         WireValue { bits: result, width: WireWidth::Bits(bytes * 8) }
@@ -755,7 +755,7 @@ impl Memory {
             let to_write = (value >> ((total - remaining) * 8)).low64() as u8;
             debug!("writing {:#x} into {:#x}", to_write, cur_addr);
             self.data.insert(cur_addr, to_write);
-            cur_addr += 1;
+            cur_addr = cur_addr.wrapping_add(1);
             remaining -= 1;
         }
     }
@@ -771,6 +771,7 @@ impl Memory {
             while cur_addr <= k {
                 debug!("output addr {:x}", cur_addr);
                 if cur_addr % 16 == 0 {
+                    cur_addr = (k >> 4) << 4;
                     write!(result, "|  0x{:07x}_:  ", cur_addr >> 4)?;
                 }
                 if cur_addr == k {
@@ -785,14 +786,10 @@ impl Memory {
                 }
                 if cur_addr % 16 == 15 {
                     write!(result, "    |\n")?;
-                    /* potentially skip ahead */
-                    if k > cur_addr {
-                        cur_addr = (k >> 4) << 4;
-                    } else {
-                        cur_addr += 1;
-                    }
-                }  else {
-                    cur_addr += 1;
+                }
+                cur_addr = cur_addr.wrapping_add(1);
+                if cur_addr == 0 {
+                    break
                 }
             }
         }
@@ -803,7 +800,7 @@ impl Memory {
                 7 => write!(result, "     ")?,
                 _ => write!(result, "   ")?,
             };
-            cur_addr += 1;
+            cur_addr = cur_addr.wrapping_add(1);
         }
         Ok(())
     }
@@ -828,6 +825,13 @@ const Y86_STATUSES: [&'static str; 6] = [
     "3 (Invalid Address)",
     "4 (Invalid Instruction)",
     "5 (Pipeline Error)"
+];
+
+const Y86_REGISTERS: [&'static str; 16] = [
+    "%rax", "%rcx", "%rdx", "%rbx",
+    "%rsp", "%rbp", "%rsi", "%rdi",
+    "%r8", "%r9", "%r10", "%r11",
+    "%r12", "%r13", "%r14", "NONE"
 ];
 
 impl RunningProgram {
@@ -856,8 +860,13 @@ impl RunningProgram {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
+        self.run_with_trace(&mut sink())
+    }
+
+    pub fn run_with_trace<W: Write>(&mut self, trace_out: &mut W) -> Result<(), Error> {
         while !self.done() {
-            self.step()?;
+            self.step_with_trace(trace_out)?;
+            self.dump_y86(trace_out, true)?;
         }
         Ok(())
     }
@@ -874,13 +883,23 @@ impl RunningProgram {
         )
     }
 
-    fn step_in_place(&mut self) -> Result<(), Error> {
+    // FIXME: assumes Y86
+    fn name_register(&self, i: usize) -> &'static str {
+        if (i as usize) < Y86_REGISTERS.len() {
+            return Y86_REGISTERS[i as usize];
+        } else {
+            return "unknown"
+        }
+    }
+
+    pub fn step_with_trace<W: Write>(&mut self, trace_out: &mut W) -> Result<(), Error> {
         self.program.process_register_banks(&mut self.values)?;
         for action in &self.program.actions {
             debug!("processing action {:?}", action);
             match action {
                &Action::Assign(ref name, ref expr, ref width) => {
                   let result = expr.evaluate(&self.values)?.as_width(*width);
+                  writeln!(trace_out, "{} set to {}", name, result.bits)?;
                   debug!("computed value {:?}", result);
                   let mut inserted = false;
                   if let Some(value) = self.values.get_mut(name) {
@@ -899,8 +918,13 @@ impl RunningProgram {
                    if do_read {
                        let address_value = *self.values.get(address).unwrap();
                        let value = self.memory.read(address_value.bits.low64(), *bytes);
+                       writeln!(trace_out,
+                                "{} set to {} (reading {} bytes from memory at {}=0x{:x})",
+                                out_port, value, bytes, address, address_value.bits)?;
                        self.values.insert(out_port.clone(), value);
                    } else {
+                       writeln!(trace_out,
+                                "not reading from memory since {} is 0", is_read.clone().unwrap())?;
                        // keep the result well-defined
                        let zero = WireValue::new(u128::new(0)).as_width(WireWidth::from((bytes * 8) as usize));
                        self.values.insert(out_port.clone(), zero);
@@ -914,32 +938,50 @@ impl RunningProgram {
                    if do_write {
                        let address_value = self.values.get(address).unwrap();
                        let input_value = self.values.get(in_port).unwrap();
+                       writeln!(trace_out,
+                                "writing {}={} to memory at {}=0x{:x}",
+                                in_port, input_value, address, address_value)?;
                        self.memory.write(address_value.bits.low64(), input_value.bits, *bytes);
+                   } else {
+                       writeln!(trace_out,
+                                "not writing to memory since {} is 0", is_write.clone().unwrap())?;
                    }
                },
                &Action::SetStatus { ref in_wire } => {
                    self.last_status = Some(self.values.get(in_wire).unwrap().bits.low64() as u8);
                },
                &Action::ReadProgramRegister { ref number, ref out_port } => {
-                   let number = self.values.get(number).unwrap().bits.low64() as usize;
+                   let number_wire = number;
+                   let number = self.values.get(number_wire).unwrap().bits.low64() as usize;
                    if number < self.registers.len() {
                        self.values.insert(out_port.clone(),
                            WireValue { bits: u128::new(self.registers[number]), width: WireWidth::Bits(64) }
                        );
+                       writeln!(trace_out,
+                                "from register {}={} ({}), reading {} into {}",
+                                number_wire, number, self.name_register(number),
+                                self.registers[number], out_port)?;
                    } else {
+                       // should not be reached, but make sure behavior is consistent in case
                        self.values.insert(out_port.clone(), WireValue {
                            bits: u128::new(0), width: WireWidth::Bits(64)
                        });
                    }
                },
                &Action::WriteProgramRegister { ref number, ref in_port } => {
-                   let number = self.values.get(number).unwrap().bits.low64() as usize;
+                   let number_wire = number;
+                   let number = self.values.get(number_wire).unwrap().bits.low64() as usize;
                    if number < self.registers.len() && number != self.zero_register {
                        self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
                    }
+                   writeln!(trace_out,
+                            "writing {}={} into register {}={} ({})",
+                            in_port, self.registers[number],
+                            number_wire, number, self.name_register(number))?;
                },
             }
         }
+        self.cycle += 1;
 
         Ok(())
     }
@@ -949,9 +991,7 @@ impl RunningProgram {
     pub fn values(&self) -> &WireValues { &self.values }
 
     pub fn step(&mut self) -> Result<(), Error> {
-        try!(self.step_in_place());
-        self.cycle += 1;
-        Ok(())
+        self.step_with_trace(&mut sink())
     }
 
     pub fn status_or_default(&self, default: u8) -> u8 {
@@ -961,7 +1001,9 @@ impl RunningProgram {
 
     // FIXME: hard-coded Y86 status codes
     pub fn done(&self) -> bool {
-        self.status_or_default(1) != 1 || self.cycle > self.timeout
+        (self.status_or_default(1) != 1 &&
+         self.status_or_default(1) != 0
+         ) || self.cycle > self.timeout
     }
 
     pub fn halted(&self) -> bool {
@@ -982,7 +1024,7 @@ impl RunningProgram {
         writeln!(result, "| R9:  {:16x}   R10: {:16x}   R11: {:16x} |",
             self.registers[9], self.registers[10], self.registers[11])?;
         writeln!(result, "| R12: {:16x}   R13: {:16x}   R14: {:16x} |",
-            self.registers[9], self.registers[10], self.registers[11])?;
+            self.registers[12], self.registers[13], self.registers[14])?;
         Ok(())
     }
 
