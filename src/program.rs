@@ -451,6 +451,8 @@ const ADDQ   = 0b0000, SUBQ = 0b0001, ANDQ = 0b0010, XORQ = 0b0011;
 
 const true = 1;
 const false = 0;
+const TRUE = 1;
+const FALSE = 0;
 ";
 
 impl Program {
