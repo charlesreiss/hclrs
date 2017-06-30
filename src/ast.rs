@@ -15,6 +15,10 @@ use self::num_traits::cast::ToPrimitive;
 
 use errors::Error;
 
+// if true, require equality for non-bitwise binary ops;
+// otherwise, take maximum
+const STRICT_WIRE_WIDTHS: bool = false;
+
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq)]
 pub enum WireWidth {
@@ -53,6 +57,19 @@ impl WireWidth {
                     Some(self)
                 } else {
                     None
+                }
+        }
+    }
+
+    pub fn max(self, other: WireWidth) -> WireWidth {
+        match (self, other) {
+            (WireWidth::Unlimited, _) => other,
+            (_, WireWidth::Unlimited) => self,
+            (WireWidth::Bits(s), WireWidth::Bits(t)) =>
+                if s > t {
+                    self
+                } else {
+                    other
                 }
         }
     }
@@ -158,7 +175,8 @@ impl From<u64> for WireValue {
 #[derive(Debug,Eq,PartialEq,Clone,Copy)]
 enum BinOpKind {
     Boolean,
-    EqualWidth
+    EqualWidth,
+    EqualWidthWeak,
 }
 
 #[derive(Debug,Eq,PartialEq)]
@@ -209,6 +227,12 @@ impl BinOpCode {
             BinOpCode::Less => BinOpKind::Boolean,
             BinOpCode::Greater => BinOpKind::Boolean,
             BinOpCode::NotEqual => BinOpKind::Boolean,
+
+            BinOpCode::Add => BinOpKind::EqualWidthWeak,
+            BinOpCode::Sub => BinOpKind::EqualWidthWeak,
+            BinOpCode::Mul => BinOpKind::EqualWidthWeak,
+            BinOpCode::Div => BinOpKind::EqualWidthWeak,
+
             _ => BinOpKind::EqualWidth,
         }
     }
@@ -257,6 +281,15 @@ impl BinOpCode {
                 match left.width.combine(right.width) {
                     Some(width) => width,
                     None => return Err(Error::RuntimeMismatchedWidths()),
+                },
+            BinOpKind::EqualWidthWeak =>
+                if STRICT_WIRE_WIDTHS {
+                    match left.width.combine(right.width) {
+                        Some(width) => width,
+                        None => return Err(Error::RuntimeMismatchedWidths()),
+                    }
+                } else {
+                    left.width.max(right.width)
                 },
             BinOpKind::Boolean => WireWidth::Bits(1),
         };
@@ -310,6 +343,13 @@ impl Expr {
             Expr::BinOp(opcode, ref left, ref right) =>
                 match opcode.kind() {
                     BinOpKind::EqualWidth => left.width(widths)?.combine_exprs(right.width(widths)?, left, right),
+                    BinOpKind::EqualWidthWeak => {
+                        if STRICT_WIRE_WIDTHS {
+                            left.width(widths)?.combine_exprs(right.width(widths)?, left, right)
+                        } else {
+                            Ok((left.width(widths)?).max(right.width(widths)?))
+                        }
+                    },
                     BinOpKind::Boolean => Ok(WireWidth::Bits(1)),
                 },
             Expr::Mux(ref options) => {
