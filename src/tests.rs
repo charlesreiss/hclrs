@@ -395,7 +395,8 @@ fn expect_execute(hcl_path: &Path, yo_path: &Path, expect_output_path: &Path) {
     let mut yo_reader = BufReader::new(File::open(yo_path).unwrap());
     running_program.load_memory_y86(&mut yo_reader).unwrap();
     // FIXME: control with env var
-    running_program.run_with_trace(&mut stderr()).unwrap();
+    ///running_program.run_with_trace(&mut stderr()).unwrap();
+    running_program.run().unwrap();
     let result = running_program.dump_y86_str(false);
     let mut expect_output_reader = BufReader::new(File::open(expect_output_path).unwrap());
     let mut expect_output = String::new();
@@ -443,5 +444,8 @@ fn external_reference() {
     let mut dir = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).parent().unwrap().to_owned();
     dir.push("hclrs-testdata");
     assert!(dir.is_dir());
+    check_reference_dir(&dir);
+    let mut dir = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).parent().unwrap().to_owned();
+    dir.push("hclrs-studentref");
     check_reference_dir(&dir);
 }
