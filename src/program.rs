@@ -853,7 +853,7 @@ impl RunningProgram {
             registers: registers,
             zero_register: zero_register,
             last_status: None,
-            timeout: 1000,
+            timeout: 9999,
         }
     }
 
@@ -1113,14 +1113,14 @@ impl RunningProgram {
             writeln!(result,
                 "+----------------------- halted in state: ------------------------------+"
             )?;
-        } else if self.done() {
-            writeln!(result,
-                "+------------------- error caused in state: ----------------------------+"
-            )?;
         } else if self.timed_out() {
             writeln!(result,
                 "+------------ timed out after {:5} cycles in state: -------------------+",
                 self.cycle
+            )?;
+        } else if self.done() {
+            writeln!(result,
+                "+------------------- error caused in state: ----------------------------+"
             )?;
         } else {
             writeln!(result,
@@ -1137,7 +1137,7 @@ impl RunningProgram {
             writeln!(result,
                 "+--------------------- (end of halted state) ---------------------------+"
             )?;
-        } else if self.done() {
+        } else if self.done() && !self.timed_out() {
             writeln!(result,
                 "+-------------------- (end of error state) -----------------------------+"
             )?;
@@ -1146,7 +1146,7 @@ impl RunningProgram {
                 "+-----------------------------------------------------------------------+"
             )?;
         }
-        if self.done() {
+        if self.done() && !self.timed_out() {
             writeln!(result, "Cycles run: {}", self.cycle)?;
             if !self.halted() && !self.timed_out() {
                 writeln!(result, "Error code: {}", self.name_status_y86())?;
