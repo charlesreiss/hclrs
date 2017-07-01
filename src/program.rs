@@ -241,8 +241,9 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
         },
         FixedFunction::read_port("reg_srcA", "reg_outputA"),
         FixedFunction::read_port("reg_srcB", "reg_outputB"),
+        // note: the order here is important for priority
         FixedFunction::write_port("reg_dstE", "reg_inputE"),
-        FixedFunction::write_port("reg_dstM", "reg_inputM")
+        FixedFunction::write_port("reg_dstM", "reg_inputM"),
     )
 }
 
