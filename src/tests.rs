@@ -387,11 +387,9 @@ fn regfile_program() {
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("40").as_width(width64)));
 }
 
-fn expect_execute(hcl_path: &Path, yo_path: &Path, expect_output_path: &Path) {
-    debug!("expect_execute({:?}, {:?}, {:?})", hcl_path, yo_path, expect_output_path);
-    let file_contents = read_y86_hcl(hcl_path).unwrap();
-    let program = parse_y86_hcl(&file_contents).unwrap();
-    let mut running_program = RunningProgram::new_y86(program);
+fn expect_execute(program: &Program, yo_path: &Path, expect_output_path: &Path) {
+        debug!("expect_execute(..., {:?}, {:?})", yo_path, expect_output_path);
+    let mut running_program = RunningProgram::new_y86((*program).clone());
     let mut yo_reader = BufReader::new(File::open(yo_path).unwrap());
     running_program.load_memory_y86(&mut yo_reader).unwrap();
     // FIXME: control with env var
@@ -407,6 +405,8 @@ fn expect_execute(hcl_path: &Path, yo_path: &Path, expect_output_path: &Path) {
 }
 
 fn check_hcl_with_references(hcl_path: &Path, reference_dir: &Path, yo_dir: &Path) {
+    let file_contents = read_y86_hcl(hcl_path).unwrap();
+    let program = parse_y86_hcl(&file_contents).unwrap();
     for entry in read_dir(reference_dir).unwrap() {
         let entry = entry.unwrap();
         if entry.file_name().to_str().unwrap().ends_with(".txt") {
@@ -416,25 +416,30 @@ fn check_hcl_with_references(hcl_path: &Path, reference_dir: &Path, yo_dir: &Pat
             yo_file.push_str(".yo");
             let yo_file = yo_dir.join(yo_file);
             assert!(yo_file.is_file(), "{:?} is not file", yo_file);
-            expect_execute(hcl_path, yo_file.as_path(), ref_path.as_path());
+            expect_execute(&program, yo_file.as_path(), ref_path.as_path());
         }
     }
 }
 
 fn check_reference_dir(dir: &Path) {
+    let mut entries = Vec::new();
     for entry in read_dir(dir).unwrap() {
         let entry = entry.unwrap();
         if entry.file_name().to_str().unwrap().ends_with(".hcl") {
-            let hcl_path = entry.path();
-            debug!("found hcl {:?}", hcl_path);
-            let basename = hcl_path.file_stem().unwrap();
-            let mut reference_dir = String::from(basename.to_str().unwrap());
-            reference_dir.push_str("-reference");
-            let reference_dir = hcl_path.with_file_name(reference_dir);
-            let yo_dir = hcl_path.with_file_name("y86");
-            check_hcl_with_references(hcl_path.as_path(), reference_dir.as_path(),
-                                      yo_dir.as_path())
+            entries.push(entry.path().to_owned());
         }
+    }
+    entries.sort();
+    for entry in entries {
+        let hcl_path = entry.as_path();
+        debug!("found hcl {:?}", hcl_path);
+        let basename = hcl_path.file_stem().unwrap();
+        let mut reference_dir = String::from(basename.to_str().unwrap());
+        reference_dir.push_str("-reference");
+        let reference_dir = hcl_path.with_file_name(reference_dir);
+        let yo_dir = hcl_path.with_file_name("y86");
+        check_hcl_with_references(hcl_path, reference_dir.as_path(),
+                                  yo_dir.as_path())
     }
 }
 
