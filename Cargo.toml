@@ -29,3 +29,6 @@ version = "0.3.8"
 
 [dependencies.env_logger]
 version = "0.4.3"
+
+[dependencies.getopts]
+version = "0.2"

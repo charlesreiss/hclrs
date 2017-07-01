@@ -246,7 +246,7 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct RegisterBank {
     label: String,
     signals: Vec<(String, String, WireWidth)>, // in, out
@@ -256,7 +256,7 @@ pub struct RegisterBank {
 }
 
 // interpreter representation of a program
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Program {
     constants: WireValues,
     actions: Vec<Action>,  // in topological order
@@ -862,13 +862,14 @@ impl RunningProgram {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
-        self.run_with_trace(&mut sink())
+        self.run_with_trace(&mut sink(), &mut sink(), false)
     }
 
-    pub fn run_with_trace<W: Write>(&mut self, trace_out: &mut W) -> Result<(), Error> {
+    pub fn run_with_trace<W1: Write, W2: Write>(&mut self,
+                step_out: &mut W1, trace_out: &mut W2, dump_registers: bool) -> Result<(), Error> {
         while !self.done() {
             self.step_with_trace(trace_out)?;
-            self.dump_y86(trace_out, true)?;
+            self.dump_y86(step_out, dump_registers)?;
         }
         Ok(())
     }
@@ -895,13 +896,12 @@ impl RunningProgram {
     }
 
     pub fn step_with_trace<W: Write>(&mut self, trace_out: &mut W) -> Result<(), Error> {
-        self.program.process_register_banks(&mut self.values)?;
         for action in &self.program.actions {
             debug!("processing action {:?}", action);
             match action {
                &Action::Assign(ref name, ref expr, ref width) => {
                   let result = expr.evaluate(&self.values)?.as_width(*width);
-                  writeln!(trace_out, "{} set to {}", name, result.bits)?;
+                  writeln!(trace_out, "{} set to 0x{:x}", name, result.bits)?;
                   debug!("computed value {:?}", result);
                   let mut inserted = false;
                   if let Some(value) = self.values.get_mut(name) {
@@ -913,6 +913,7 @@ impl RunningProgram {
                   }
                },
                &Action::ReadMemory { ref is_read, ref address, ref out_port, ref bytes } => {
+                   // FIXME: instruction decoding
                    let do_read = match is_read {
                        &None => true,
                        &Some(ref wire) => self.values.get(wire).unwrap().is_true(),
@@ -921,7 +922,7 @@ impl RunningProgram {
                        let address_value = *self.values.get(address).unwrap();
                        let value = self.memory.read(address_value.bits.low64(), *bytes);
                        writeln!(trace_out,
-                                "{} set to {} (reading {} bytes from memory at {}=0x{:x})",
+                                "{} set to 0x{:x} (reading {} bytes from memory at {}=0x{:x})",
                                 out_port, value, bytes, address, address_value.bits)?;
                        self.values.insert(out_port.clone(), value);
                    } else {
@@ -960,9 +961,9 @@ impl RunningProgram {
                            WireValue { bits: u128::new(self.registers[number]), width: WireWidth::Bits(64) }
                        );
                        writeln!(trace_out,
-                                "from register {}={} ({}), reading {} into {}",
-                                number_wire, number, self.name_register(number),
-                                self.registers[number], out_port)?;
+                                "set {} to 0x{:x} from register {}={} ({})",
+                                out_port, self.registers[number],
+                                number_wire, number, self.name_register(number))?;
                    } else {
                        // should not be reached, but make sure behavior is consistent in case
                        self.values.insert(out_port.clone(), WireValue {
@@ -976,13 +977,15 @@ impl RunningProgram {
                    if number < self.registers.len() && number != self.zero_register {
                        self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
                    }
+                   // FIXME: different message for zero register
                    writeln!(trace_out,
-                            "writing {}={} into register {}={} ({})",
+                            "writing {}=0x{:x} into register {}={} ({})",
                             in_port, self.registers[number],
                             number_wire, number, self.name_register(number))?;
                },
             }
         }
+        self.program.process_register_banks(&mut self.values)?;
         self.cycle += 1;
 
         Ok(())
