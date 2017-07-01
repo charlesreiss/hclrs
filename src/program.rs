@@ -490,10 +490,12 @@ impl Program {
                         needed_wires.insert(decl.name.as_str());
                     }
                 },
-                Statement::Assignment(ref assign) => {
-                    for name in &assign.names {
-                        // FIXME: detect multiple declarations
-                        assignments.insert(name.as_str(), &*assign.value);
+                Statement::Assignments(ref assigns) => {
+                    for assign in assigns {
+                        for name in &assign.names {
+                            // FIXME: detect multiple declarations
+                            assignments.insert(name.as_str(), &*assign.value);
+                        }
                     }
                 },
                 Statement::RegisterBankDecl(ref decl) => {

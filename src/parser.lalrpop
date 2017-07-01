@@ -55,9 +55,19 @@ Repeat<delim, T>: Vec<T> = {
     }
 };
 
-Comma<T>: Vec<T> = Repeat<",", T>;
+Repeat1<delim, T>: Vec<T> = {
+    <v:(<T> delim)*> <e:T> delim? => {
+        let mut v = v;
+        v.push(e);
+        v
+    }
+};
 
-Semicolon<T>: Vec<T> = Repeat<";", T>;
+Commas<T>: Vec<T> = Repeat<",", T>;
+Commas1<T>: Vec<T> = Repeat1<",", T>;
+
+Semicolons<T>: Vec<T> = Repeat<";", T>;
+Semicolons1<T>: Vec<T> = Repeat1<";", T>;
 
 WidthConstant : WireWidth = {
     <start:@L> <constant:CONSTANT> <end:@R> =>? {
@@ -87,7 +97,7 @@ WireDecl : WireDecl = {
 
 // public for testing
 pub WireDecls : Vec<WireDecl> = {
-    "wire" <c:Comma<WireDecl>> => c
+    "wire" <c:Commas<WireDecl>> => c
 };
 
 ConstDecl : ConstDecl = {
@@ -96,7 +106,7 @@ ConstDecl : ConstDecl = {
 
 // public for testing
 pub ConstDecls : Vec<ConstDecl> = {
-    "const" <c:Comma<ConstDecl>> => c
+    "const" <c:Commas<ConstDecl>> => c
 };
 
 BinOpAddSub : BinOpCode = {
@@ -151,7 +161,14 @@ BinTier<Op,NextTier> : Box<Expr> = {
 
 ExprLogicalOr = BinTier<BinOpLogicalOr, ExprLogicalAnd>;
 ExprLogicalAnd = BinTier<BinOpLogicalAnd, ExprCompare>;
-ExprCompare = BinTier<BinOpCompare, ExprOr>;
+ExprCompare = BinTier<BinOpCompare, ExprIn>;
+ExprIn: Box<Expr> = {
+    <e:ExprOr> "in" "{" <l:Commas<Expr>> "}" => {
+        let v = l.into_iter().map(|x| *x).collect();
+        Box::new(Expr::InSet(e, v))
+    },
+    ExprOr
+};
 ExprOr = BinTier<BinOpOr, ExprXor>;
 ExprXor = BinTier<BinOpXor, ExprAnd>;
 ExprAnd = BinTier<BinOpAnd, ExprShift>;
@@ -169,7 +186,7 @@ MuxOption : MuxOption = {
     <l:Expr> ":" <r:Expr> => MuxOption { condition: l, value: r },
 };
 
-MuxOptions = Semicolon<MuxOption>;
+MuxOptions = Semicolons<MuxOption>;
 
 SimpleTerm : Box<Expr> = {
     CONSTANT => Box::new(Expr::Constant(<>)),
@@ -189,10 +206,6 @@ Term : Box<Expr> = {
 
 // public for testing
 pub Expr: Box<Expr> = {
-    <e:ExprLogicalOr> "in" "{" <l:Comma<Expr>> "}" => {
-        let v = l.into_iter().map(|x| *x).collect();
-        Box::new(Expr::InSet(e, v))
-    },
     ExprLogicalOr,
 };
 
@@ -213,7 +226,7 @@ RegisterDecl : RegisterDecl = {
 };
 
 RegisterBankDecl : RegisterBankDecl = {
-    "register" <i:ID> "{" <r:Semicolon<RegisterDecl>> "}" => {
+    "register" <i:ID> "{" <r:Semicolons<RegisterDecl>> "}" => {
         RegisterBankDecl {
             name: String::from(i),
             registers: r,
@@ -221,9 +234,10 @@ RegisterBankDecl : RegisterBankDecl = {
     }
 };
 
+Assignments : Vec<Assignment> = Commas1<Assignment>;
 
 StatementNeedSemi : Statement = {
-    Assignment => Statement::Assignment(<>),
+    Assignments => Statement::Assignments(<>),
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
 };

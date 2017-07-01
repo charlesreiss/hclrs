@@ -603,6 +603,6 @@ pub struct RegisterBankDecl {
 pub enum Statement {
     ConstDecls(Vec<ConstDecl>),
     WireDecls(Vec<WireDecl>),
-    Assignment(Assignment),
+    Assignments(Vec<Assignment>),
     RegisterBankDecl(RegisterBankDecl),
 }
