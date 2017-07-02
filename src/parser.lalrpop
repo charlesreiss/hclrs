@@ -159,9 +159,16 @@ BinTier<Op,NextTier> : Box<Expr> = {
     NextTier
 };
 
+
+BinTierNonAssoc<Op,NextTier> : Box<Expr> = {
+    <l:NextTier> <o:Op> <r:NextTier> =>
+        Box::new(Expr::BinOp(o, l, r)),
+    NextTier
+};
+
 ExprLogicalOr = BinTier<BinOpLogicalOr, ExprLogicalAnd>;
 ExprLogicalAnd = BinTier<BinOpLogicalAnd, ExprCompare>;
-ExprCompare = BinTier<BinOpCompare, ExprIn>;
+ExprCompare = BinTierNonAssoc<BinOpCompare, ExprIn>;
 ExprIn: Box<Expr> = {
     <e:ExprOr> "in" "{" <l:Commas<Expr>> "}" => {
         let v = l.into_iter().map(|x| *x).collect();
