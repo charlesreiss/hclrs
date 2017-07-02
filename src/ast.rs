@@ -283,7 +283,7 @@ impl BinOpCode {
 
     fn apply(self, left: WireValue, right: WireValue) -> Result<WireValue, Error> {
         let final_width = match self.kind() {
-            BinOpKind::EqualWidth | BinOpKind::BooleanFromEqualWidth =>
+            BinOpKind::EqualWidth =>
                 match left.width.combine(right.width) {
                     Some(width) => width,
                     None => return Err(Error::RuntimeMismatchedWidths()),
@@ -297,7 +297,8 @@ impl BinOpCode {
                 } else {
                     left.width.max(right.width)
                 },
-            BinOpKind::BooleanCombine => WireWidth::Bits(1),
+            BinOpKind::BooleanCombine | BinOpKind::BooleanFromEqualWidth =>
+                WireWidth::Bits(1),
         };
         Ok(left.op(right, |l, r| self.apply_raw(l, r), final_width))
     }
