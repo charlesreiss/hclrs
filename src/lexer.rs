@@ -245,7 +245,7 @@ fn is_binary_char(c: char) -> bool {
 }
 
 fn is_not_newline(c: char) -> bool {
-    c != '\n'
+    c != '\n' && c != '\r'
 }
 
 fn is_not_star(c: char) -> bool {
@@ -359,6 +359,13 @@ mod tests {
     #[test]
     fn unicode_comment() {
         let mut lexer = Lexer::new("#❤️\nconst\n");
+        assert_eq!(lexer.next().unwrap().unwrap().1, Tok::Const);
+    }
+
+
+    #[test]
+    fn cr_newline() {
+        let mut lexer = Lexer::new("#❤️\rconst\r");
         assert_eq!(lexer.next().unwrap().unwrap().1, Tok::Const);
     }
 }
