@@ -873,6 +873,7 @@ impl RunningProgram {
                 step_out: &mut W1, trace_out: &mut W2, dump_registers: bool) -> Result<(), Error> {
         while !self.done() {
             self.step_with_trace(trace_out)?;
+            // FIXME: initial output?
             self.dump_y86(step_out, dump_registers)?;
         }
         Ok(())
