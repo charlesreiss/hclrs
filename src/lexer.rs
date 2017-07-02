@@ -100,16 +100,18 @@ impl<'input> Lexer<'input> {
     }
 
     fn get_while<F>(&mut self, start: usize, f: F) -> (usize, &'input str, usize) where F: Fn(char) -> bool {
-        let mut last = start;
+        // default to EOF
+        let mut last = self.input.len();
         while let Some((i, c)) = self.internal_next() {
             if f(c) {
-                last = i;
+                // do nothing
             } else {
+                last = i;
                 self.unget();
                 break;
             }
         }
-        (start, self.extract(start, last + 1), last + 1)
+        (start, self.extract(start, last), last)
     }
 
     fn expect_or_error<F>(&mut self, f: F) -> Result<char, Error> where F: Fn(char) -> bool {
@@ -347,5 +349,16 @@ impl<'input> Iterator for Lexer<'input> {
                 return None;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unicode_comment() {
+        let mut lexer = Lexer::new("#❤️\nconst\n");
+        assert_eq!(lexer.next().unwrap().unwrap().1, Tok::Const);
     }
 }

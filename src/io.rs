@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
+use std::str;
 
 use errors::Error;
 
@@ -26,14 +27,23 @@ impl FileContents {
         let mut file_reader = BufReader::new(file);
         let mut contents = String::from(preamble);
         let filename = path.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or(String::from("<unknown>"));
+        let mut newlines = Vec::new();
+        mark_newlines(0, &mut newlines, &contents);
+        let mut file_bytes = Vec::new();
+        file_reader.read_to_end(&mut file_bytes)?;
+        // FIXME: error if bytes aren't UTF-8?
+        match str::from_utf8(&file_bytes) {
+            Ok(_) => {},
+            Err(bad_utf8) => {
+                warn!("input file {} is not valid UTF-8", filename);
+            },
+        };
+        contents.push_str(&String::from_utf8_lossy(&file_bytes));
+        mark_newlines(preamble.len(), &mut newlines, contents.split_at(preamble.len()).1);
         let filenames = vec!(
             (0, String::from("<builtin>")),
             (preamble.len(), filename)
         );
-        let mut newlines = Vec::new();
-        mark_newlines(0, &mut newlines, &contents);
-        file_reader.read_to_string(&mut contents)?;
-        mark_newlines(preamble.len(), &mut newlines, contents.split_at(preamble.len()).1);
         Ok(FileContents {
             data: contents,
             filenames: filenames,
