@@ -290,17 +290,19 @@ impl<'input> Iterator for Lexer<'input> {
                                 continue;
                             } else if c2 == Some('*') { // /*-style comment
                                 debug!("/* comment");
+                                let mut found_end = false;
                                 loop {
                                     self.get_while(i, is_not_star);
                                     if self.peek_char() == Some('*') {
                                         self.internal_next();
                                         if self.peek_char() == Some('/') {
+                                            found_end = true;
                                             self.internal_next();
                                             break;
                                         }
                                     }
                                 }
-                                if self.peek_char() == None {
+                                if !found_end {
                                     return Some(Err(Error::UnterminatedComment(i)));
                                 }
                                 continue;
@@ -367,5 +369,11 @@ mod tests {
     fn cr_newline() {
         let mut lexer = Lexer::new("#❤️\rconst\r");
         assert_eq!(lexer.next().unwrap().unwrap().1, Tok::Const);
+    }
+
+    #[test]
+    fn eof_comment() {
+        let mut lexer = Lexer::new("/* foo */");
+        assert!(lexer.next().is_none());
     }
 }
