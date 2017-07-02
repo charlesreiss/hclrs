@@ -387,26 +387,27 @@ fn regfile_program() {
     assert_eq!(running_program.values().get("reg_outputA"), Some(&WireValue::from_decimal("40").as_width(width64)));
 }
 
-fn expect_execute(program: &Program, yo_path: &Path, expect_output_path: &Path) {
-        debug!("expect_execute(..., {:?}, {:?})", yo_path, expect_output_path);
+fn expect_execute(program: &Program, yo_path: &Path, expect_output_path: &Path) -> Result<(), Error> {
+    debug!("expect_execute(..., {:?}, {:?})", yo_path, expect_output_path);
     let mut running_program = RunningProgram::new_y86((*program).clone());
-    let mut yo_reader = BufReader::new(File::open(yo_path).unwrap());
-    running_program.load_memory_y86(&mut yo_reader).unwrap();
+    let mut yo_reader = BufReader::new(File::open(yo_path)?);
+    running_program.load_memory_y86(&mut yo_reader)?;
     // FIXME: control with env var
     ///running_program.run_with_trace(&mut stderr()).unwrap();
-    running_program.run().unwrap();
+    running_program.run()?;
     let result = running_program.dump_y86_str(false);
-    let mut expect_output_reader = BufReader::new(File::open(expect_output_path).unwrap());
+    let mut expect_output_reader = BufReader::new(File::open(expect_output_path)?);
     let mut expect_output = String::new();
-    expect_output_reader.read_to_string(&mut expect_output).unwrap();
+    expect_output_reader.read_to_string(&mut expect_output)?;
     assert_eq!(expect_output, result,
         "reference:\n{}\nactual:\n{}\n", expect_output, result
     );
+    Ok(())
 }
 
-fn check_hcl_with_references(hcl_path: &Path, reference_dir: &Path, yo_dir: &Path) {
-    let file_contents = read_y86_hcl(hcl_path).unwrap();
-    let program = parse_y86_hcl(&file_contents).unwrap();
+fn check_hcl_with_references(hcl_path: &Path, reference_dir: &Path, yo_dir: &Path) -> Result<(), Error> {
+    let file_contents = read_y86_hcl(hcl_path)?;
+    let program = parse_y86_hcl(&file_contents)?;
     for entry in read_dir(reference_dir).unwrap() {
         let entry = entry.unwrap();
         if entry.file_name().to_str().unwrap().ends_with(".txt") {
@@ -416,12 +417,14 @@ fn check_hcl_with_references(hcl_path: &Path, reference_dir: &Path, yo_dir: &Pat
             yo_file.push_str(".yo");
             let yo_file = yo_dir.join(yo_file);
             assert!(yo_file.is_file(), "{:?} is not file", yo_file);
-            expect_execute(&program, yo_file.as_path(), ref_path.as_path());
+            expect_execute(&program, yo_file.as_path(), ref_path.as_path())?;
         }
     }
+    Ok(())
 }
 
 fn check_reference_dir(dir: &Path) {
+    let mut errors = Vec::new();
     let mut entries = Vec::new();
     for entry in read_dir(dir).unwrap() {
         let entry = entry.unwrap();
@@ -438,8 +441,17 @@ fn check_reference_dir(dir: &Path) {
         reference_dir.push_str("-reference");
         let reference_dir = hcl_path.with_file_name(reference_dir);
         let yo_dir = hcl_path.with_file_name("y86");
-        check_hcl_with_references(hcl_path, reference_dir.as_path(),
-                                  yo_dir.as_path())
+        match check_hcl_with_references(hcl_path, reference_dir.as_path(),
+                                  yo_dir.as_path()) {
+            Err(e) => errors.push((hcl_path.to_owned(), e)),
+            Ok(_) => {},
+        }
+    }
+    if errors.len() > 0 {
+        for (name, error) in errors {
+            println!("{:?}: {:?}", name, error);
+        }
+        assert!(false);
     }
 }
 
