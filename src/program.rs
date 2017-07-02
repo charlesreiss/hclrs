@@ -363,17 +363,18 @@ fn assignments_to_actions<'a>(
     // this makes doing something like setting reg_dstE without setting reg_inputE an error,
     // but doesn't make something like setting mem_addr without mem_writebit an error
     {
-        let mut missing_inputs = Vec::new();
+        let mut bad_inputs = Vec::new();
         for name in unused_fixed_inputs {
             if !used_fixed_inputs.contains(name) {
-                missing_inputs.push(name);
+                bad_inputs.push(name);
             }
         }
 
-        if missing_inputs.len() > 0 {
-            let missing_list = missing_inputs.iter().map(
-                |x| Error::UnsetWire(String::from(*x))).collect();
-            return Err(Error::MultipleErrors(missing_list));
+        if bad_inputs.len() > 0 {
+            // FIXME: identify what inputs could be added for error message
+            let bad_list = bad_inputs.iter().map(
+                |x| Error::PartialFixedInput(String::from(*x))).collect();
+            return Err(Error::MultipleErrors(bad_list));
         }
     }
 
