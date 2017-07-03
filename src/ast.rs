@@ -3,6 +3,7 @@ extern crate num_traits;
 
 use extprim::u128::u128;
 
+use std::ops::{Deref, DerefMut};
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
 use std::convert::From;
@@ -13,6 +14,7 @@ use std::str::FromStr;
 
 use self::num_traits::cast::ToPrimitive;
 
+use lexer::Span;
 use errors::Error;
 
 // if true:
@@ -29,6 +31,14 @@ pub enum WireWidth {
 
 impl From<usize> for WireWidth {
     fn from(s: usize) -> Self { WireWidth::Bits(s as u8) }
+}
+
+impl From<i32> for WireWidth {
+    fn from(s: i32) -> Self { WireWidth::Bits(s as u8) }
+}
+
+impl From<u8> for WireWidth {
+    fn from(s: u8) -> Self { WireWidth::Bits(s) }
 }
 
 impl FromStr for WireWidth {
@@ -79,14 +89,14 @@ impl WireWidth {
         }
     }
 
-    pub fn combine_exprs(self, other: WireWidth, left_expr: &Expr, right_expr: &Expr) -> Result<WireWidth, Error> {
+    pub fn combine_exprs(self, other: WireWidth, left_expr: &SpannedExpr, right_expr: &SpannedExpr) -> Result<WireWidth, Error> {
         match self.combine(other) {
             Some(width) => Ok(width),
             None => Err(Error::MismatchedExprWidths(left_expr.clone(), right_expr.clone()))
         }
     }
 
-    pub fn combine_expr_and_wire(self, other: WireWidth, wire: &str, right_expr: &Expr) -> Result<WireWidth, Error> {
+    pub fn combine_expr_and_wire(self, other: WireWidth, wire: &str, right_expr: &SpannedExpr) -> Result<WireWidth, Error> {
         match self.combine(other) {
             Some(width) => Ok(width),
             None => Err(Error::MismatchedWireWidths(String::from(wire), right_expr.clone()))
@@ -189,12 +199,23 @@ enum BinOpKind {
 pub struct WireDecl {
     pub name: String,
     pub width: WireWidth,
+    pub span: Span,
+}
+
+impl WireDecl {
+    pub fn synthetic(name: &str, bits: u8) -> Self {
+        WireDecl {
+            name: String::from(name),
+            width: WireWidth::from(bits),
+            span: (0, 0),
+        }
+    }
 }
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct ConstDecl {
     pub name: String,
-    pub value: Box<Expr>,
+    pub value: SpannedExpr,
 }
 
 #[derive(Debug,Eq,PartialEq,Clone,Copy)]
@@ -325,27 +346,56 @@ impl UnOpCode {
 
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub struct MuxOption {
-    pub condition: Box<Expr>,
-    pub value: Box<Expr>,
+    pub condition: SpannedExpr,
+    pub value: SpannedExpr,
+}
+
+#[derive(Debug,Eq,PartialEq,Clone)]
+pub struct SpannedExpr {
+    pub expr: Box<Expr>,
+    pub span: Span,
+}
+
+impl SpannedExpr {
+    pub fn new(span: Span, expr: Expr) -> Self {
+        SpannedExpr {
+            expr: Box::new(expr),
+            span: span,
+        }
+    }
+
+    pub fn to_expr(&self) -> &Expr { self.expr.as_ref() }
+
+    pub fn to_mut_expr(&mut self) -> &mut Expr { self.expr.as_mut() }
+}
+
+impl Deref for SpannedExpr {
+    type Target = Expr;
+
+    fn deref(&self) -> &Expr { self.expr.as_ref() }
+}
+
+impl DerefMut for SpannedExpr {
+    fn deref_mut(&mut self) -> &mut Expr { self.expr.as_mut() }
 }
 
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub enum Expr {
     Constant(WireValue),
-    BinOp(BinOpCode, Box<Expr>, Box<Expr>),
-    UnOp(UnOpCode, Box<Expr>),
+    BinOp(BinOpCode, SpannedExpr, SpannedExpr),
+    UnOp(UnOpCode, SpannedExpr),
     Mux(Vec<MuxOption>),
     NamedWire(String),
-    BitSelect { from: Box<Expr>, low: u8, high: u8 },
-    Concat(Box<Expr>, Box<Expr>),
-    InSet(Box<Expr>, Vec<Expr>),
+    BitSelect { from: SpannedExpr, low: u8, high: u8 },
+    Concat(SpannedExpr, SpannedExpr),
+    InSet(SpannedExpr, Vec<SpannedExpr>),
 }
 
 pub type WireValues = HashMap<String, WireValue>;
 
-impl Expr {
+impl SpannedExpr {
     pub fn width<'a>(&self, widths: &'a HashMap<&'a str, WireWidth>) -> Result<WireWidth, Error> {
-        match *self {
+        match *self.expr {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
                 match opcode.kind() {
@@ -360,10 +410,10 @@ impl Expr {
                     BinOpKind::BooleanCombine => {
                         if STRICT_WIRE_WIDTHS {
                             if !left.width(widths)?.possibly_boolean() {
-                                return Err(Error::NonBooleanWidth((**left).clone()));
+                                return Err(Error::NonBooleanWidth(left.clone()));
                             }
                             if !right.width(widths)?.possibly_boolean() {
-                                return Err(Error::NonBooleanWidth((**right).clone()));
+                                return Err(Error::NonBooleanWidth(right.clone()));
                             }
                         } else {
                             left.width(widths)?;
@@ -424,10 +474,10 @@ impl Expr {
                             Err(Error::WireTooWide(self.clone()))
                         }
                     } else {
-                        Err(Error::NoBitWidth((**right).clone()))
+                        Err(Error::NoBitWidth(right.clone()))
                     }
                 } else {
-                    Err(Error::NoBitWidth((**left).clone()))
+                    Err(Error::NoBitWidth(left.clone()))
                 }
             },
             Expr::InSet(ref left, ref lst) => {
@@ -436,7 +486,7 @@ impl Expr {
                     match left_width.combine(item.width(widths)?) {
                         Some(_) => {},
                         None => {
-                            return Err(Error::MismatchedExprWidths((**left).clone(), (*item).clone()));
+                            return Err(Error::MismatchedExprWidths(left.clone(), item.clone()));
                         },
                     }
                 }
@@ -450,14 +500,14 @@ impl Expr {
     }
 
     pub fn evaluate<'a>(&self, wires: &'a WireValues) -> Result<WireValue, Error> {
-        match *self {
+        match *self.expr {
             Expr::Constant(value) => Ok(value),
             Expr::BinOp(opcode, ref left, ref right) => {
                 let left_value = left.evaluate(wires)?;
                 let right_value = right.evaluate(wires)?;
                 match opcode.apply(left_value, right_value) {
                     Err(Error::RuntimeMismatchedWidths()) => 
-                        Err(Error::MismatchedExprWidths((**left).clone(), (**right).clone())),
+                        Err(Error::MismatchedExprWidths(left.clone(), right.clone())),
                     Err(x) => Err(x),
                     Ok(x) => Ok(x),
                 }
@@ -496,10 +546,10 @@ impl Expr {
                         Ok(WireValue::new(shifted_left | right_value.bits).as_width(
                             WireWidth::Bits(left_bits + right_bits)))
                     } else {
-                        Err(Error::NoBitWidth((**left).clone()))
+                        Err(Error::NoBitWidth(left.clone()))
                     }
                 } else {
-                    Err(Error::NoBitWidth((**right).clone()))
+                    Err(Error::NoBitWidth(right.clone()))
                 }
             },
             Expr::InSet(ref left, ref lst) => {
@@ -515,87 +565,149 @@ impl Expr {
         }
     }
 
-    fn accumulate_referenced_wires<'a, 'b>(&'a self, set: &'b mut HashSet<&'a str>) {
-        match *self {
+    pub fn apply_to_all<'a, 'b, F>(&'a self, func: &'b mut F) -> Result<(), Error>
+            where F: FnMut(&'a Self) -> Result<(), Error> {
+        func(self)?;
+        match *self.expr {
             Expr::Constant(_) => {},
             Expr::BinOp(_, ref left, ref right) => {
-                left.accumulate_referenced_wires(set);
-                right.accumulate_referenced_wires(set);
+                left.apply_to_all(func)?;
+                right.apply_to_all(func)?;
             },
             Expr::UnOp(_, ref inner) => {
-                inner.accumulate_referenced_wires(set);
+                inner.apply_to_all(func)?;
             },
             Expr::Mux(ref options) => {
                 for ref option in options {
-                    option.condition.accumulate_referenced_wires(set);
-                    option.value.accumulate_referenced_wires(set);
+                    option.condition.apply_to_all(func)?;
+                    option.value.apply_to_all(func)?;
                 }
             },
-            Expr::NamedWire(ref name) => {
-                set.insert(name.as_str());
-            },
+            Expr::NamedWire(_) => {},
             Expr::BitSelect { ref from, .. } => {
-                from.accumulate_referenced_wires(set);
+                from.apply_to_all(func)?;
             },
             Expr::Concat(ref left, ref right) => {
-                left.accumulate_referenced_wires(set);
-                right.accumulate_referenced_wires(set);
+                left.apply_to_all(func)?;
+                right.apply_to_all(func)?;
             },
             Expr::InSet(ref left, ref lst) => {
-                left.accumulate_referenced_wires(set);
+                left.apply_to_all(func)?;
                 for ref item in lst {
-                    item.accumulate_referenced_wires(set);
+                    item.apply_to_all(func)?;
                 }
             }
         }
+        Ok(())
+    }
+
+    pub fn apply_to_all_mut<F>(&mut self, func: &mut F) -> Result<(), Error>
+            where F: FnMut(&mut Self) -> Result<(), Error> {
+        func(self)?;
+        match *self.expr {
+            Expr::Constant(_) => {},
+            Expr::BinOp(_, _, _) => {
+                if let Expr::BinOp(_, ref mut left, _) = *self.expr {
+                    left.apply_to_all_mut(func)?;
+                } 
+                if let Expr::BinOp(_, _, ref mut right) = *self.expr {
+                    right.apply_to_all_mut(func)?;
+                }
+            },
+            Expr::UnOp(_, ref mut inner) => {
+                inner.apply_to_all_mut(func)?;
+            },
+            Expr::Mux(ref mut options) => {
+                for ref mut option in options {
+                    option.condition.apply_to_all_mut(func)?;
+                    option.value.apply_to_all_mut(func)?;
+                }
+            },
+            Expr::NamedWire(_) => {},
+            Expr::BitSelect { ref mut from, .. } => {
+                from.apply_to_all_mut(func)?;
+            },
+            Expr::Concat(_, _) => {
+                if let Expr::Concat(ref mut left, _) = *self.expr {
+                    left.apply_to_all_mut(func)?;
+                } 
+                if let Expr::Concat(_, ref mut right) = *self.expr {
+                    right.apply_to_all_mut(func)?;
+                }
+            },
+            Expr::InSet(_, _) => {
+                if let Expr::InSet(ref mut left, _) = *self.expr {
+                    left.apply_to_all_mut(func)?;
+                }
+                if let Expr::InSet(_, ref mut lst) = *self.expr {
+                    for ref mut item in lst {
+                        item.apply_to_all_mut(func)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn referenced_wires<'a>(&'a self) -> HashSet<&'a str> {
         let mut result = HashSet::new();
-        self.accumulate_referenced_wires(&mut result);
+        self.apply_to_all(&mut |item| {
+            match *item.expr {
+                Expr::NamedWire(ref name) => {
+                    result.insert(name.as_str());
+                },
+                _ => {},
+            }
+            Ok(())
+        });
         result
     }
 }
 
 #[test]
-fn test_referenced_wires() {
+fn referenced_wires() {
     let mut just_foo = HashSet::new();
     just_foo.insert("foo");
     let mut foo_and_bar = HashSet::new();
     foo_and_bar.insert("foo");
     foo_and_bar.insert("bar");
     assert_eq!(
-        Expr::NamedWire(String::from("foo")).referenced_wires(),
+        SpannedExpr::new((0, 0), Expr::NamedWire(String::from("foo"))).referenced_wires(),
         just_foo
     );
     assert_eq!(
-        Expr::UnOp(UnOpCode::Negate,
-            Box::new(Expr::NamedWire(String::from("foo")))).referenced_wires(),
+        SpannedExpr::new((0, 0), Expr::UnOp(UnOpCode::Negate,
+            SpannedExpr::new((0, 0), Expr::NamedWire(String::from("foo")))
+        )).referenced_wires(),
         just_foo
     );
     assert_eq!(
-        Expr::BinOp(BinOpCode::Add,
-            Box::new(Expr::NamedWire(String::from("foo"))),
-            Box::new(Expr::NamedWire(String::from("bar")))).referenced_wires(),
+        SpannedExpr::new((0, 0), Expr::BinOp(BinOpCode::Add,
+            SpannedExpr::new((0, 0), Expr::NamedWire(String::from("foo"))),
+            SpannedExpr::new((0, 0), Expr::NamedWire(String::from("bar")))
+        )).referenced_wires(),
         foo_and_bar
     );
 }
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct Assignment {
+    pub span: Span,
     pub names: Vec<String>,
-    pub value: Box<Expr>,
+    pub value: SpannedExpr,
 }
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct RegisterDecl {
+    pub span: Span,
     pub name: String,
     pub width: WireWidth,
-    pub default: Box<Expr>,
+    pub default: SpannedExpr,
 }
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct RegisterBankDecl {
+    pub span: Span,
     pub name: String,
     pub registers: Vec<RegisterDecl>,
 }

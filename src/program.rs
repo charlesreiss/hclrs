@@ -1,4 +1,4 @@
-use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, Expr};
+use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr};
 use extprim::u128::u128;
 use errors::Error;
 use std::collections::hash_set::HashSet;
@@ -109,7 +109,7 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
 pub enum Action {
     // not included:
         // register bank processing (done at beginning of cycle)
-    Assign(String, Box<Expr>, WireWidth),
+    Assign(String, SpannedExpr, WireWidth),
     ReadProgramRegister { number: String, out_port: String },
     ReadMemory { is_read: Option<String>, address: String, out_port: String, bytes: u8 },
     // these actions MUST be done last:
@@ -130,11 +130,8 @@ pub struct FixedFunction {
 impl FixedFunction {
     fn read_port(number: &str, output: &str) -> FixedFunction {
         FixedFunction {
-            in_wires: vec!(WireDecl { name: String::from(number), width: WireWidth::from(4) }),
-            out_wire: Some(WireDecl {
-                name: String::from(output),
-                width: WireWidth::from(64),
-            }),
+            in_wires: vec!(WireDecl::synthetic(number, 4)),
+            out_wire: Some(WireDecl::synthetic(output, 64)),
             action: Action::ReadProgramRegister {
                 number: String::from(number),
                 out_port: String::from(output),
@@ -146,14 +143,8 @@ impl FixedFunction {
     fn write_port(number: &str, input: &str) -> FixedFunction {
         FixedFunction {
             in_wires: vec!(
-                WireDecl {
-                    name: String::from(number),
-                    width: WireWidth::Bits(4),
-                },
-                WireDecl {
-                    name: String::from(input),
-                    width: WireWidth::Bits(64),
-                }
+                WireDecl::synthetic(number, 4),
+                WireDecl::synthetic(input, 64)
             ),
             out_wire: None,
             action: Action::WriteProgramRegister {
@@ -168,23 +159,14 @@ impl FixedFunction {
 pub fn y86_fixed_functions() -> Vec<FixedFunction> {
     return vec!(
         FixedFunction {
-            in_wires: vec!(WireDecl {
-                name: String::from("Stat"),
-                width: WireWidth::Bits(3),
-            }),
+            in_wires: vec!(WireDecl::synthetic("Stat", 3)),
             out_wire: None,
             action: Action::SetStatus { in_wire: String::from("Stat") },
             mandatory: true,
         },
         FixedFunction {
-            in_wires: vec!(WireDecl {
-                name: String::from("pc"),
-                width: WireWidth::from(64),
-            }),
-            out_wire: Some(WireDecl {
-                name: String::from("i10bytes"),
-                width: WireWidth::from(80),
-            }),
+            in_wires: vec!(WireDecl::synthetic("pc", 64)),
+            out_wire: Some(WireDecl::synthetic("i10bytes", 80)),
             action: Action::ReadMemory {
                 is_read: None,
                 address: String::from("pc"),
@@ -194,18 +176,11 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
             mandatory: true,
         },
         FixedFunction {
-            in_wires: vec!(WireDecl {
-                name: String::from("mem_addr"),
-                width: WireWidth::from(64),
-            },
-            WireDecl {
-                name: String::from("mem_readbit"),
-                width: WireWidth::from(1),
-            }),
-            out_wire: Some(WireDecl {
-                name: String::from("mem_output"),
-                width: WireWidth::from(64),
-            }),
+            in_wires: vec!(
+                WireDecl::synthetic("mem_addr", 64),
+                WireDecl::synthetic("mem_readbit", 1)
+            ),
+            out_wire: Some(WireDecl::synthetic("mem_output", 64)),
             action: Action::ReadMemory {
                 is_read: Some(String::from("mem_readbit")),
                 address: String::from("mem_addr"),
@@ -217,18 +192,9 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
         FixedFunction {
             // FIXME: some way to indicate that mem_write -> mem_input + mem_addr?
             in_wires: vec!(
-                WireDecl {
-                    name: String::from("mem_addr"),
-                    width: WireWidth::Bits(64),
-                },
-                WireDecl {
-                    name: String::from("mem_input"),
-                    width: WireWidth::Bits(64),
-                },
-                WireDecl {
-                    name: String::from("mem_writebit"),
-                    width: WireWidth::Bits(1),
-                }
+                WireDecl::synthetic("mem_addr", 64),
+                WireDecl::synthetic("mem_input", 64),
+                WireDecl::synthetic("mem_writebit", 1)
             ),
             out_wire: None,
             action: Action::WriteMemory {
@@ -265,7 +231,7 @@ pub struct Program {
 }
 
 
-fn resolve_constants(exprs: &HashMap<&str, &Expr>) -> Result<HashMap<String, WireValue>, Error> {
+fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<String, WireValue>, Error> {
     let mut graph = Graph::new();
     for (name, expr) in exprs {
         for in_name in expr.referenced_wires() {
@@ -289,7 +255,7 @@ fn resolve_constants(exprs: &HashMap<&str, &Expr>) -> Result<HashMap<String, Wir
 }
 
 fn assignments_to_actions<'a>(
-        assignments: &'a HashMap<&'a str, &Expr>,
+        assignments: &'a HashMap<&'a str, &SpannedExpr>,
         widths: &'a HashMap<&'a str, WireWidth>,
         known_values: &'a HashSet<&'a str>,
         fixed_functions: &'a Vec<FixedFunction>,
@@ -397,7 +363,7 @@ fn assignments_to_actions<'a>(
                         expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
                         result.push(Action::Assign(
                             String::from(name),
-                            Box::new((*expr).clone()),
+                            (*expr).clone(),
                             *the_width,
                         ));
                     } else {
@@ -468,7 +434,7 @@ impl Program {
         // TODO: preamble (constants)
     ) -> Result<Program, Error> {
         // Step 1: Split statements into constant declarations, wire declarations, assignments
-        let mut constants_raw: HashMap<&str, &Expr> = HashMap::new();
+        let mut constants_raw: HashMap<&str, &SpannedExpr> = HashMap::new();
         let mut wires = HashMap::new();
         let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
@@ -483,7 +449,7 @@ impl Program {
             match *statement {
                 Statement::ConstDecls(ref decls) => {
                     for ref decl in decls {
-                        constants_raw.insert(decl.name.as_str(), &*decl.value);
+                        constants_raw.insert(decl.name.as_str(), &decl.value);
                     }
                 },
                 Statement::WireDecls(ref decls) => {
@@ -496,7 +462,7 @@ impl Program {
                     for assign in assigns {
                         for name in &assign.names {
                             // FIXME: detect multiple declarations
-                            assignments.insert(name.as_str(), &*assign.value);
+                            assignments.insert(name.as_str(), &assign.value);
                         }
                     }
                 },
@@ -549,7 +515,7 @@ impl Program {
                     return Err(Error::MismatchedRegisterDefaultWidths(
                         decl.name.clone(),
                         register.name.clone(),
-                        (*register.default).clone(),
+                        register.default.clone(),
                     ));
 
                 }

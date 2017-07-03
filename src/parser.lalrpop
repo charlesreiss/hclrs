@@ -1,5 +1,6 @@
 use extprim::u128::u128;
-use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue, BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement};
+use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue,
+          BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement, SpannedExpr};
 use errors::Error;
 use lexer::Tok;
 use lalrpop_util::{ErrorRecovery, ParseError};
@@ -70,7 +71,7 @@ Semicolons<T>: Vec<T> = Repeat<";", T>;
 Semicolons1<T>: Vec<T> = Repeat1<";", T>;
 
 WidthConstant : WireWidth = {
-    <start:@L> <constant:CONSTANT> <end:@R> =>? {
+    <start:@R> <constant:CONSTANT> <end:@L> =>? {
         if constant.bits <= u128::new(128) {
             Ok(WireWidth::Bits(constant.bits.low64() as u8))
         } else {
@@ -80,7 +81,7 @@ WidthConstant : WireWidth = {
 };
 
 SimpleConstant : u8 = {
-    <start:@L> <constant:CONSTANT> <end:@R> =>? {
+    <start:@R> <constant:CONSTANT> <end:@L> =>? {
         if constant.bits <= u128::new(128) {
             Ok(constant.bits.low64() as u8)
         } else {
@@ -91,8 +92,8 @@ SimpleConstant : u8 = {
 
 
 WireDecl : WireDecl = {
-    <name:ID> ":" <width:WidthConstant> =>
-        WireDecl { name: String::from(name), width: width },
+    <start:@R> <name:ID> ":" <width:WidthConstant> <end:@L>  =>
+        WireDecl { name: String::from(name), width: width, span: (start, end), },
 };
 
 // public for testing
@@ -153,26 +154,26 @@ BinOpShift : BinOpCode = {
     ">>" => BinOpCode::RightShift,
 };
 
-BinTier<Op,NextTier> : Box<Expr> = {
-    <l:BinTier<Op,NextTier>> <o:Op> <r:NextTier> =>
-        Box::new(Expr::BinOp(o, l, r)),
+BinTier<Op,NextTier> : SpannedExpr = {
+    <start:@R> <l:BinTier<Op,NextTier>> <o:Op> <r:NextTier> <end:@L> =>
+        SpannedExpr::new((start,end), Expr::BinOp(o, l, r)),
     NextTier
 };
 
 
-BinTierNonAssoc<Op,NextTier> : Box<Expr> = {
-    <l:NextTier> <o:Op> <r:NextTier> =>
-        Box::new(Expr::BinOp(o, l, r)),
+BinTierNonAssoc<Op,NextTier> : SpannedExpr = {
+    <start:@R> <l:NextTier> <o:Op> <r:NextTier> <end:@L> =>
+        SpannedExpr::new((start,end), Expr::BinOp(o, l, r)),
     NextTier
 };
 
 ExprLogicalOr = BinTier<BinOpLogicalOr, ExprLogicalAnd>;
 ExprLogicalAnd = BinTier<BinOpLogicalAnd, ExprCompare>;
 ExprCompare = BinTierNonAssoc<BinOpCompare, ExprIn>;
-ExprIn: Box<Expr> = {
-    <e:ExprOr> "in" "{" <l:Commas<Expr>> "}" => {
-        let v = l.into_iter().map(|x| *x).collect();
-        Box::new(Expr::InSet(e, v))
+ExprIn: SpannedExpr = {
+    <start:@R> <e:ExprOr> "in" "{" <l:Commas<Expr>> "}" <end:@L> => {
+        let v = l.into_iter().collect();
+        SpannedExpr::new((start, end), Expr::InSet(e, v))
     },
     ExprOr
 };
@@ -195,48 +196,50 @@ MuxOption : MuxOption = {
 
 MuxOptions = Semicolons<MuxOption>;
 
-SimpleTerm : Box<Expr> = {
-    CONSTANT => Box::new(Expr::Constant(<>)),
+SimpleTerm : SpannedExpr = {
+    <start:@R> <c:CONSTANT> <end:@L> => SpannedExpr::new((start,end), Expr::Constant(c)),
     "(" <e:Expr> ")" => e,
-    "[" <e:MuxOptions> "]" => Box::new(Expr::Mux(e)),
-    ID => Box::new(Expr::NamedWire(String::from(<>))),
+    <start:@R> "[" <e:MuxOptions> "]" <end:@L> => SpannedExpr::new((start,end), Expr::Mux(e)),
+    <start:@R> <i:ID> <end:@L> => SpannedExpr::new((start,end), Expr::NamedWire(String::from(i))),
 };
 
-Term : Box<Expr> = {
-    <u:UnOp> <t:SimpleTerm> => Box::new(Expr::UnOp(u, t)),
-    <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> "]" => {
-        Box::new(Expr::BitSelect { from: e, low: low, high: high })
+Term : SpannedExpr = {
+    <start:@R> <u:UnOp> <t:SimpleTerm> <end:@L> => SpannedExpr::new((start,end), Expr::UnOp(u, t)),
+    <start:@R> <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> "]" <end:@L> => {
+        SpannedExpr::new((start,end), Expr::BitSelect { from: e, low: low, high: high })
     },
-    "(" <l:Term> ".." <r:Term> ")" => Box::new(Expr::Concat(l, r)),
+    <start:@R> "(" <l:Term> ".." <r:Term> ")" <end:@L> => SpannedExpr::new((start,end), Expr::Concat(l, r)),
     <e:SimpleTerm> => e,
 };
 
 // public for testing
-pub Expr: Box<Expr> = {
+pub Expr: SpannedExpr = {
     ExprLogicalOr,
 };
 
 Assignment : Assignment = {
-    <n:(<ID> "=")+> <v:Expr> => {
+    <start:@R> <n:(<ID> "=")+> <v:Expr> <end:@L> => {
         let mut names: Vec<String> = Vec::new();
         for name in n {
             names.push(String::from(name));
         }
-        Assignment { names: names, value: v }
+        Assignment { span: (start,end), names: names, value: v }
     }
 };
 
 RegisterDecl : RegisterDecl = {
-    <n:ID> ":" <w:WidthConstant> "=" <e:Expr> => {
-        RegisterDecl { name: String::from(n), width: w, default: e }
+    <start:@R> <n:ID> ":" <w:WidthConstant> "=" <e:Expr> <end:@L> => {
+        RegisterDecl { name: String::from(n), width: w, default: e,
+                       span: (start,end), }
     },
 };
 
 RegisterBankDecl : RegisterBankDecl = {
-    "register" <i:ID> "{" <r:Semicolons<RegisterDecl>> "}" => {
+    <start:@R> "register" <i:ID> "{" <r:Semicolons<RegisterDecl>> "}" <end:@L> => {
         RegisterBankDecl {
             name: String::from(i),
             registers: r,
+            span: (start,end),
         }
     }
 };

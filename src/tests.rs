@@ -1,4 +1,4 @@
-use ast::{Statement, Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
+use ast::{Statement, SpannedExpr, Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
 use program::{Program, RunningProgram};
 use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 use lexer::{Lexer, Tok};
@@ -28,7 +28,7 @@ pub fn init_logger() {
 
 #[allow(non_snake_case)]
 fn parse_Expr_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
-        Result<Box<Expr>, ParseErrorType<'input>> {
+        Result<SpannedExpr, ParseErrorType<'input>> {
     let lexer = Lexer::new(s);
     parse_Expr(errors, lexer)
 }
@@ -56,46 +56,75 @@ fn parse_Statements_str<'input>(
     parse_Statements(errors, lexer)
 }
 
+fn strip_spans(mut expr: SpannedExpr) -> SpannedExpr {
+    expr.apply_to_all_mut(&mut |item| {
+        item.span = (0, 0);
+        Ok(())
+    }).unwrap();
+    expr
+}
+
 #[test]
 fn parse_binops() {
     let mut errors = Vec::new();
     assert_eq!(
         parse_Expr_str(&mut errors, "0b1000 * 15").unwrap(),
-        Box::new(Expr::BinOp(BinOpCode::Mul,
-                    Box::new(Expr::Constant(WireValue::from_binary("1000"))),
-                    Box::new(Expr::Constant(WireValue::from_decimal("15")))),
+        SpannedExpr::new(
+            (0, 11),
+            Expr::BinOp(BinOpCode::Mul,
+                SpannedExpr::new((0, 6), Expr::Constant(WireValue::from_binary("1000"))),
+                SpannedExpr::new((9, 11), Expr::Constant(WireValue::from_decimal("15")))
+            ),
         )
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "0b1000 * 15 + 1").unwrap(),
-        Box::new(Expr::BinOp(BinOpCode::Add,
-            Box::new(Expr::BinOp(BinOpCode::Mul,
-                                 Box::new(Expr::Constant(WireValue::from_binary("1000"))),
-                                 Box::new(Expr::Constant(WireValue::from_decimal("15"))),
-                                )),
-            Box::new(Expr::Constant(WireValue::from_decimal("1"))),
-        ))
+        SpannedExpr::new(
+            (0, 15),
+            Expr::BinOp(BinOpCode::Add,
+                SpannedExpr::new(
+                    (0, 11),
+                    Expr::BinOp(BinOpCode::Mul,
+                        SpannedExpr::new((0, 6), Expr::Constant(WireValue::from_binary("1000"))),
+                        SpannedExpr::new((9, 11), Expr::Constant(WireValue::from_decimal("15")))
+                    ),
+                ),
+                SpannedExpr::new((14, 15),
+                    Expr::Constant(WireValue::from_decimal("1"))
+                ),
+            ),
+        )
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "0b1000 + 15 * 1").unwrap(),
-        Box::new(Expr::BinOp(BinOpCode::Add,
-            Box::new(Expr::Constant(WireValue::from_binary("1000"))),
-            Box::new(Expr::BinOp(BinOpCode::Mul,
-                                 Box::new(Expr::Constant(WireValue::from_decimal("15"))),
-                                 Box::new(Expr::Constant(WireValue::from_decimal("1"))),
-                                )),
-        ))
+        SpannedExpr::new(
+            (0, 15),
+            Expr::BinOp(BinOpCode::Add,
+                SpannedExpr::new((0, 6), Expr::Constant(WireValue::from_binary("1000"))),
+                SpannedExpr::new(
+                    (9, 15),
+                    Expr::BinOp(BinOpCode::Mul,
+                        SpannedExpr::new((9, 11), Expr::Constant(WireValue::from_decimal("15"))),
+                        SpannedExpr::new((14, 15), Expr::Constant(WireValue::from_decimal("1"))),
+                    )
+                ),
+            ),
+        )
     );
     assert_eq!(
-        parse_Expr_str(&mut errors, "0b1000 * 15 + 1 > 0").unwrap(),
-        Box::new(Expr::BinOp(BinOpCode::Greater,
+        parse_Expr_str(&mut errors, "0b1000 * 15 + 1 > 0").unwrap().to_expr(),
+        &Expr::BinOp(BinOpCode::Greater,
             parse_Expr_str(&mut errors, "0b1000 * 15 + 1").unwrap(),
-            parse_Expr_str(&mut errors, "0").unwrap(),
-        ))
+            SpannedExpr::new((18, 19), Expr::Constant(WireValue::from_decimal("0")))
+        )
     );
     assert_eq!(
-        parse_Expr_str(&mut errors, "0b1000 & (15 + 1) > 5 && 0x1234 < 3 || 4 >= 1 << 1 / 5").unwrap(),
-        parse_Expr_str(&mut errors, "((0b1000 & (15 + 1)) > 5) && (0x1234 < 3) || (4 >= (1 << (1 / 5)))").unwrap()
+        strip_spans(
+            parse_Expr_str(&mut errors, "  0b1000 & (15 + 1)  > 5  &&  0x1234 < 3  ||  4 >= 1  <<  1 / 5   ").unwrap()
+        ),
+        strip_spans(
+            parse_Expr_str(&mut errors, "((0b1000 & (15 + 1)) > 5) && (0x1234 < 3) || (4 >= (1 << (1 / 5)))").unwrap()
+        )
     );
 }
 
@@ -104,20 +133,23 @@ fn parse_unops() {
     let mut errors = Vec::new();
     assert_eq!(
         parse_Expr_str(&mut errors, "-0b1000").unwrap(),
-        Box::new(Expr::UnOp(UnOpCode::Negate, Box::new(Expr::Constant(WireValue::from_binary("1000")))))
+        SpannedExpr::new((0, 7),
+            Expr::UnOp(UnOpCode::Negate,
+                SpannedExpr::new((1, 7), Expr::Constant(WireValue::from_binary("1000"))))
+        )
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "1+-0b1000").unwrap(),
-        Box::new(Expr::BinOp(BinOpCode::Add,
-            Box::new(Expr::Constant(WireValue::from_decimal("1"))),
-            Box::new(Expr::UnOp(UnOpCode::Negate,
-                Box::new(Expr::Constant(WireValue::from_binary("1000")))))
+        SpannedExpr::new((0, 9), Expr::BinOp(BinOpCode::Add,
+            SpannedExpr::new((0, 1), Expr::Constant(WireValue::from_decimal("1"))),
+            SpannedExpr::new((2, 9), Expr::UnOp(UnOpCode::Negate,
+                SpannedExpr::new((3, 9), Expr::Constant(WireValue::from_binary("1000")))))
         ))
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "~42").unwrap(),
-        Box::new(Expr::UnOp(UnOpCode::Complement,
-            Box::new(Expr::Constant(WireValue::from_decimal("42")))))
+        SpannedExpr::new((0, 3), Expr::UnOp(UnOpCode::Complement,
+            SpannedExpr::new((1, 3), Expr::Constant(WireValue::from_decimal("42")))))
     );
     assert_eq!(errors.len(), 0);
 }
@@ -126,38 +158,78 @@ fn parse_unops() {
 fn parse_mux() {
     let mut errors = Vec::new();
     assert_eq!(
-        parse_Expr_str(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap(),
-        Box::new(Expr::Mux(vec!(
-            MuxOption {
-                condition: Box::new(Expr::Constant(WireValue::from_decimal("0"))),
-                value: Box::new(Expr::Constant(WireValue::from_decimal("42"))),
-            },
-            MuxOption {
-                condition: Box::new(Expr::Constant(WireValue::from_hexadecimal("42"))),
-                value: Box::new(Expr::Constant(WireValue::from_decimal("43"))),
-            },
-            MuxOption {
-                condition: Box::new(Expr::Constant(WireValue::from_decimal("1"))),
-                value: Box::new(Expr::Constant(WireValue::from_decimal("44"))),
-            }
-        )))
+        parse_Expr_str(&mut errors, "[0:42;0x42:43;1:44;]").unwrap(),
+        SpannedExpr::new((0, 20),
+            Expr::Mux(vec!(
+                MuxOption {
+                    condition: SpannedExpr::new(
+                        (1, 2),
+                        Expr::Constant(WireValue::from_decimal("0"))
+                    ),
+                    value: SpannedExpr::new(
+                        (3, 5),
+                        Expr::Constant(WireValue::from_decimal("42"))
+                    ),
+                },
+                MuxOption {
+                    condition: SpannedExpr::new(
+                        (6, 10),
+                        Expr::Constant(WireValue::from_hexadecimal("42"))
+                    ),
+                    value: SpannedExpr::new(
+                        (11, 13),
+                        Expr::Constant(WireValue::from_decimal("43"))
+                    ),
+                },
+                MuxOption {
+                    condition: SpannedExpr::new(
+                        (14, 15),
+                        Expr::Constant(WireValue::from_decimal("1"))
+                    ),
+                    value: SpannedExpr::new(
+                        (16, 18),
+                        Expr::Constant(WireValue::from_decimal("44"))
+                    ),
+                }
+            ))
+        )
     );
     assert_eq!(
-        parse_Expr_str(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44 ]").unwrap(),
-        Box::new(Expr::Mux(vec!(
-            MuxOption {
-                condition: Box::new(Expr::Constant(WireValue::from_decimal("0"))),
-                value: Box::new(Expr::Constant(WireValue::from_decimal("42"))),
-            },
-            MuxOption {
-                condition: Box::new(Expr::Constant(WireValue::from_hexadecimal("42"))),
-                value: Box::new(Expr::Constant(WireValue::from_decimal("43"))),
-            },
-            MuxOption {
-                condition: Box::new(Expr::Constant(WireValue::from_decimal("1"))),
-                value: Box::new(Expr::Constant(WireValue::from_decimal("44"))),
-            }
-        )))
+        parse_Expr_str(&mut errors, "[0:42;0x42:43;1:44]").unwrap(),
+        SpannedExpr::new((0, 19),
+            Expr::Mux(vec!(
+                MuxOption {
+                    condition: SpannedExpr::new(
+                        (1, 2),
+                        Expr::Constant(WireValue::from_decimal("0"))
+                    ),
+                    value: SpannedExpr::new(
+                        (3, 5),
+                        Expr::Constant(WireValue::from_decimal("42"))
+                    ),
+                },
+                MuxOption {
+                    condition: SpannedExpr::new(
+                        (6, 10),
+                        Expr::Constant(WireValue::from_hexadecimal("42"))
+                    ),
+                    value: SpannedExpr::new(
+                        (11, 13),
+                        Expr::Constant(WireValue::from_decimal("43"))
+                    ),
+                },
+                MuxOption {
+                    condition: SpannedExpr::new(
+                        (14, 15),
+                        Expr::Constant(WireValue::from_decimal("1"))
+                    ),
+                    value: SpannedExpr::new(
+                        (16, 18),
+                        Expr::Constant(WireValue::from_decimal("44"))
+                    ),
+                }
+            ))
+        )
     );
     assert_eq!(errors.len(), 0);
 }
@@ -169,15 +241,15 @@ fn parse_wiredecls() {
     let mut errors = Vec::new();
     assert_eq!(
         parse_WireDecls_str(&mut errors, "wire x : 32 , y : 2, z : 1").unwrap(),
-        vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(32) },
-             WireDecl { name: String::from("y"), width: WireWidth::Bits(2) },
-             WireDecl { name: String::from("z"), width: WireWidth::Bits(1) })
+        vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(32), span: (5, 11), },
+             WireDecl { name: String::from("y"), width: WireWidth::Bits(2), span: (14, 19), },
+             WireDecl { name: String::from("z"), width: WireWidth::Bits(1), span: (21, 26), })
     );
     assert_eq!(errors.len(), 0);
     errors.clear();
     assert_eq!(
         parse_WireDecls_str(&mut errors, "wire x : 64").unwrap(),
-        vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(64) })
+        vec!(WireDecl { name: String::from("x"), width: WireWidth::Bits(64), span: (5, 11), })
     );
     assert_eq!(errors.len(), 0);
 }
@@ -189,10 +261,10 @@ fn parse_constdecls() {
     assert_eq!(
         parse_ConstDecls_str(&mut errors, "const x = 0x42, y=0").unwrap(),
         vec!(
-            ConstDecl { name: String::from("x"), value: Box::new(
+            ConstDecl { name: String::from("x"), value: SpannedExpr::new( (10, 14),
                 Expr::Constant(WireValue::from_hexadecimal("42"))
             ) },
-            ConstDecl { name: String::from("y"), value: Box::new(
+            ConstDecl { name: String::from("y"), value: SpannedExpr::new( (18, 19),
                 Expr::Constant(WireValue::from_decimal("0"))
             ) }
         )

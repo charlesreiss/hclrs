@@ -5,16 +5,16 @@ use std::io;
 
 use lalrpop_util::{ErrorRecovery, ParseError};
 
-use ast::{Expr, MuxOption};
+use ast::{SpannedExpr, MuxOption};
 use lexer::{Tok, Loc, Span};
 
 #[derive(Debug)]
 pub enum Error {
     MismatchedMuxWidths(Vec<MuxOption>),
-    MismatchedExprWidths(Expr, Expr),
-    MismatchedWireWidths(String, Expr),
+    MismatchedExprWidths(SpannedExpr, SpannedExpr),
+    MismatchedWireWidths(String, SpannedExpr),
     // register bank, register name, expr
-    MismatchedRegisterDefaultWidths(String, String, Expr),
+    MismatchedRegisterDefaultWidths(String, String, SpannedExpr),
     RuntimeMismatchedWidths(),
     UndefinedWire(String),
     RedefinedWire(String),
@@ -24,12 +24,12 @@ pub enum Error {
     WireLoop(Vec<String>),
     InvalidWireWidth(Span),
     InvalidRegisterBankName(String),
-    InvalidBitIndex(Expr, u8),
-    NonBooleanWidth(Expr),
-    NoBitWidth(Expr),
-    MisorderedBitIndexes(Expr),
+    InvalidBitIndex(SpannedExpr, u8),
+    NonBooleanWidth(SpannedExpr),
+    NoBitWidth(SpannedExpr),
+    MisorderedBitIndexes(SpannedExpr),
     InvalidConstant(Span),
-    WireTooWide(Expr),
+    WireTooWide(SpannedExpr),
     UnterminatedComment(Loc),
     LexicalError(Loc),
     IoError(io::Error),
