@@ -36,6 +36,14 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         return self.nodes.contains(&node);
     }
 
+    fn in_edges(&self, to: &T) -> HashSet<T> {
+        if let Some(result) = self.edges_inverted.get(to) {
+            result.clone()
+        } else {
+            HashSet::new()
+        }
+    }
+
     #[cfg(test)]
     fn out_edges(&self, to: &T) -> HashSet<T> {
         if let Some(result) = self.edges.get(to) {
@@ -350,6 +358,7 @@ fn assignments_to_actions<'a>(
         // FIXME: covered is just a sanity-check, should be removeable
         debug!("using order {:?}", sorted);
         let mut covered = known_values.clone();
+        let mut errors = Vec::new();
         for name in sorted {
             debug!("processing {:?}", name);
             match assignments.get(name) {
@@ -367,7 +376,8 @@ fn assignments_to_actions<'a>(
                             *the_width,
                         ));
                     } else {
-                        return Err(Error::UndefinedWire(String::from(name)));
+                        // FIXME: highlites the wrong part
+                        errors.push(Error::UndefinedWireAssigned(String::from(name), (*expr).clone()));
                     }
                 },
                 None => {
@@ -379,12 +389,15 @@ fn assignments_to_actions<'a>(
                             result.push(fixed.action.clone());
                         },
                         None => {
-                            return Err(Error::UndefinedWire(String::from(name)));
+                            errors.push(Error::UnsetWire(String::from(name)));
                         }
                     }
                 }
             }
             covered.insert(name);
+        }
+        if errors.len() > 0 {
+            return Err(Error::MultipleErrors(errors))
         }
     } else {
         unimplemented!();
@@ -512,11 +525,13 @@ impl Program {
                 // FIXME: better error
                 if None == value.width.combine(register.width) {
                     // FIXME: accumulate errors?
-                    return Err(Error::MismatchedRegisterDefaultWidths(
-                        decl.name.clone(),
-                        register.name.clone(),
-                        register.default.clone(),
-                    ));
+                    return Err(Error::MismatchedRegisterDefaultWidths {
+                        bank: decl.name.clone(),
+                        register_name: register.name.clone(),
+                        register_width: register.width,
+                        default_expression: register.default.clone(),
+                        expression_width: value.width,
+                    });
 
                 }
                 defaults.insert(out_name.clone(), value.as_width(register.width));

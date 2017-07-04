@@ -23,7 +23,7 @@ use errors::Error;
 const STRICT_WIRE_WIDTHS: bool = false;
 
 
-#[derive(Clone,Copy,Debug,Eq,PartialEq)]
+#[derive(Clone,Copy,Debug,Eq,PartialEq,PartialOrd,Ord)]
 pub enum WireWidth {
     Bits(u8),
     Unlimited,
@@ -92,14 +92,14 @@ impl WireWidth {
     pub fn combine_exprs(self, other: WireWidth, left_expr: &SpannedExpr, right_expr: &SpannedExpr) -> Result<WireWidth, Error> {
         match self.combine(other) {
             Some(width) => Ok(width),
-            None => Err(Error::MismatchedExprWidths(left_expr.clone(), right_expr.clone()))
+            None => Err(Error::MismatchedExprWidths(left_expr.clone(), self, right_expr.clone(), other))
         }
     }
 
     pub fn combine_expr_and_wire(self, other: WireWidth, wire: &str, right_expr: &SpannedExpr) -> Result<WireWidth, Error> {
         match self.combine(other) {
             Some(width) => Ok(width),
-            None => Err(Error::MismatchedWireWidths(String::from(wire), right_expr.clone()))
+            None => Err(Error::MismatchedWireWidths(String::from(wire), self, right_expr.clone(), other))
         }
     }
 
@@ -429,16 +429,19 @@ impl SpannedExpr {
                 },
             Expr::Mux(ref options) => {
                 let mut maybe_width = Some(WireWidth::Unlimited);
+                let mut all_widths = Vec::new();
                 for option in options {
+                    let option_width = option.value.width(widths)?;
+                    all_widths.push(option_width);
                     if let Some(cur_width) = maybe_width {
-                        maybe_width = cur_width.combine(option.value.width(widths)?);
+                        maybe_width = cur_width.combine(option_width);
                     } else {
                         break;
                     }
                 }
                 match maybe_width {
                     Some(width) => Ok(width),
-                    None => Err(Error::MismatchedMuxWidths(options.clone()))
+                    None => Err(Error::MismatchedMuxWidths(options.clone(), all_widths))
                 }
             },
             Expr::UnOp(UnOpCode::Not, ref covered) => {
@@ -448,7 +451,7 @@ impl SpannedExpr {
             Expr::UnOp(_, ref covered) => covered.width(widths),
             Expr::NamedWire(ref name) => match widths.get(name.as_str()) {
                 Some(ref width) => Ok(**width),
-                None => Err(Error::UndefinedWire(name.clone())),
+                None => Err(Error::UndefinedWireRead(name.clone(), self.clone())),
             },
             Expr::BitSelect { ref from, low, high } => {
                 if low > high {
@@ -482,15 +485,21 @@ impl SpannedExpr {
             },
             Expr::InSet(ref left, ref lst) => {
                 let left_width = left.width(widths)?;
+                let mut errors = Vec::new();
                 for item in lst {
-                    match left_width.combine(item.width(widths)?) {
+                    let item_width = item.width(widths)?;
+                    match left_width.combine(item_width) {
                         Some(_) => {},
                         None => {
-                            return Err(Error::MismatchedExprWidths(left.clone(), item.clone()));
+                            errors.push(Error::MismatchedExprWidths(left.clone(), left_width, item.clone(), item_width));
                         },
                     }
                 }
-                Ok(WireWidth::Bits(1))
+                if errors.len() > 0 {
+                    Err(Error::MultipleErrors(errors))
+                } else {
+                    Ok(WireWidth::Bits(1))
+                }
             },
         }
     }
@@ -505,12 +514,7 @@ impl SpannedExpr {
             Expr::BinOp(opcode, ref left, ref right) => {
                 let left_value = left.evaluate(wires)?;
                 let right_value = right.evaluate(wires)?;
-                match opcode.apply(left_value, right_value) {
-                    Err(Error::RuntimeMismatchedWidths()) => 
-                        Err(Error::MismatchedExprWidths(left.clone(), right.clone())),
-                    Err(x) => Err(x),
-                    Ok(x) => Ok(x),
-                }
+                opcode.apply(left_value, right_value)
             },
             Expr::UnOp(opcode, ref inner) => {
                 let inner_value = inner.evaluate(wires)?;
@@ -530,7 +534,7 @@ impl SpannedExpr {
             },
             Expr::NamedWire(ref name) => match wires.get(name) {
                 Some(value) => Ok(*value),
-                None => Err(Error::UndefinedWire(name.clone())),
+                None => Err(Error::UndefinedWireRead(name.clone(), self.clone())),
             },
             Expr::BitSelect { ref from, low, high } => {
                 let inner_value = from.evaluate(wires)?.bits;
@@ -655,6 +659,22 @@ impl SpannedExpr {
             match *item.expr {
                 Expr::NamedWire(ref name) => {
                     result.insert(name.as_str());
+                },
+                _ => {},
+            }
+            Ok(())
+        });
+        result
+    }
+
+    pub fn find_references<'a>(&'a self, find_name: &str) -> Vec<SpannedExpr> {
+        let mut result = Vec::new();
+        self.apply_to_all(&mut |item| {
+            match *item.expr {
+                Expr::NamedWire(ref name) => {
+                    if name == find_name {
+                        result.push(item.clone());
+                    }
                 },
                 _ => {},
             }

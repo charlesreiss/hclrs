@@ -76,7 +76,7 @@ fn main_real() -> Result<(), Error> {
     let file_contents = read_y86_hcl(path)?;
     let yo_path = Path::new(yo_filename);
     match run_y86(&file_contents, yo_path, &mut trace_out, &mut step_out, dump_registers, timeout) {
-        Err(e) => format_error(&mut stderr(), &file_contents, &e)?,
+        Err(e) => e.format_for_contents(&mut stderr(), &file_contents)?,
         _ => {},
     }
     Ok(())
