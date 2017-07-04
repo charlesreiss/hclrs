@@ -112,7 +112,6 @@ impl WireWidth {
     }
 }
 
-// FIXME: disallow Eq?
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub struct WireValue {
     pub bits: u128,
@@ -422,7 +421,6 @@ impl SpannedExpr {
                         Ok(WireWidth::Bits(1))
                     },
                     BinOpKind::BooleanFromEqualWidth => {
-                        // FIXME: consider non-strict wire widths case here
                         left.width(widths)?.combine_exprs(right.width(widths)?, left, right)?;
                         Ok(WireWidth::Bits(1))
                     }
@@ -463,7 +461,6 @@ impl SpannedExpr {
                             return Err(Error::InvalidBitIndex(self.clone(), high));
                         }
                     },
-                    // FIXME: should we allow this?
                     WireWidth::Unlimited => {},
                 }
                 Ok(WireWidth::Bits(high - low))
@@ -522,14 +519,12 @@ impl SpannedExpr {
             },
             Expr::Mux(ref options) => {
                 let mut result: WireValue = WireValue::new(u128::new(0));
-                // FIXME: consider warning for using default?
                 for ref option in options {
                     if option.condition.evaluate(wires)?.is_true() {
                         result = try!(option.value.evaluate(wires));
                         break;
                     }
                 }
-                // FIXME: do we need to adjust widths here?
                 Ok(result)
             },
             Expr::NamedWire(ref name) => match wires.get(name) {

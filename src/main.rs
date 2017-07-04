@@ -13,7 +13,6 @@ use getopts::Options;
 
 fn main() {
     env_logger::init().unwrap();
-    // FIXME: real error messages
     main_real().unwrap();
 }
 
@@ -24,9 +23,7 @@ fn run_y86<W1: Write, W2: Write>(file_contents: &FileContents, yo_path: &Path,
     let mut yo_reader = BufReader::new(File::open(yo_path)?);
     running_program.set_timeout(timeout);
     running_program.load_memory_y86(&mut yo_reader)?;
-    // FIXME: output initial state
     running_program.run_with_trace(step_out, trace_out, dump_registers)?;
-    // FIXME: duplicate with -d
     println!("{}", running_program.dump_y86_str(dump_registers));
     Ok(())
 }

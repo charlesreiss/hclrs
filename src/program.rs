@@ -96,7 +96,7 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         }
 
         if visited.len() != self.num_edges {
-            // found a cycle
+            // FiXME: found a cycle, return
             unimplemented!();
         }
 
@@ -198,7 +198,6 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
             mandatory: false,
         },
         FixedFunction {
-            // FIXME: some way to indicate that mem_write -> mem_input + mem_addr?
             in_wires: vec!(
                 WireDecl::synthetic("mem_addr", 64),
                 WireDecl::synthetic("mem_input", 64),
@@ -240,6 +239,7 @@ pub struct Program {
 
 
 fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<String, WireValue>, Error> {
+    let mut errors = Vec::new();
     let mut graph = Graph::new();
     for (name, expr) in exprs {
         for in_name in expr.referenced_wires() {
@@ -247,17 +247,28 @@ fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<Stri
         }
         graph.add_node(name);
     }
+    if errors.len() > 0 {
+        return Err(Error::MultipleErrors(errors));
+    }
     if let Ok(sorted) = graph.topological_sort() {
         let mut results = HashMap::new();
         for name in sorted {
-            let value = try!(exprs.get(&name).unwrap().evaluate(&results));
-            results.insert(
-                String::from(name),
-                value
-            );
+            match exprs.get(&name).unwrap().evaluate(&results) {
+                Ok(value) => {
+                    results.insert(
+                        String::from(name),
+                        value
+                    );
+                },
+                Err(e) => { errors.push(e); },
+            }
+        }
+        if errors.len() > 0 {
+            return Err(Error::MultipleErrors(errors));
         }
         Ok(results)
     } else {
+        // FIXME: generate loop error
         unimplemented!();
     }
 }
@@ -367,8 +378,6 @@ fn assignments_to_actions<'a>(
                         assert!(covered.contains(&in_name));
                     }
                     if let Some(the_width) = widths.get(name) {
-                        // FIXME: allow implict wire length shrinking?
-                        //        (check with HCL2D did)
                         expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
                         result.push(Action::Assign(
                             String::from(name),
@@ -400,6 +409,7 @@ fn assignments_to_actions<'a>(
             return Err(Error::MultipleErrors(errors))
         }
     } else {
+        // FIXME: generate loop error
         unimplemented!();
     }
 
@@ -444,7 +454,6 @@ impl Program {
     pub fn new(
         statements: Vec<Statement>,
         fixed_functions: Vec<FixedFunction>
-        // TODO: preamble (constants)
     ) -> Result<Program, Error> {
         // Step 1: Split statements into constant declarations, wire declarations, assignments
         let mut constants_raw: HashMap<&str, &SpannedExpr> = HashMap::new();
@@ -452,6 +461,7 @@ impl Program {
         let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
         let mut register_banks_raw = Vec::new();
+        let mut errors = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
                 wires.insert(in_wire.name.as_str(), in_wire.width);
@@ -475,6 +485,9 @@ impl Program {
                     for assign in assigns {
                         for name in &assign.names {
                             // FIXME: detect multiple declarations
+                            if assignments.contains_key(name.as_str()) {
+                                errors.push(Error::RedefinedWire(name.clone()));
+                            }
                             assignments.insert(name.as_str(), &assign.value);
                         }
                     }
@@ -489,21 +502,43 @@ impl Program {
         debug!("wire decls: {:?}", wires);
         debug!("assignments: {:?}", assignments);
 
+        for (_, expr) in &constants_raw {
+            for in_name in expr.referenced_wires() {
+                let is_constant = constants_raw.contains_key(&in_name);
+                if wires.contains_key(&in_name) && !is_constant {
+                    for usage in expr.find_references(in_name).into_iter() {
+                        errors.push(Error::NonConstantWireRead(String::from(in_name), usage));
+                    }
+                } else if !is_constant {
+                    for usage in expr.find_references(in_name).into_iter() {
+                        errors.push(Error::UndefinedWireRead(String::from(in_name), usage));
+                    }
+                }
+            }
+        }
+
+        if errors.len() > 0 {
+            return Err(Error::MultipleErrors(errors));
+        }
+
         // Step 2: find constants values
-        let constants = try!(resolve_constants(&constants_raw));
+        let constants = resolve_constants(&constants_raw)?;
 
         // Step 3: resolve register banks
         let mut register_banks = Vec::new();
+        let mut errors = Vec::new();
         for decl in &register_banks_raw {
             // FIXME: should really iterate over graphemes
             let name_chars: Vec<char> = decl.name.chars().collect();
             if name_chars.len() != 2 {
-                return Err(Error::InvalidRegisterBankName(decl.name.clone()));
+                errors.push(Error::InvalidRegisterBankName(decl.name.clone()));
+                continue;
             }
             let in_prefix = name_chars[0];
             let out_prefix = name_chars[1];
             if !in_prefix.is_lowercase() || !out_prefix.is_uppercase() {
-                return Err(Error::InvalidRegisterBankName(decl.name.clone()));
+                errors.push(Error::InvalidRegisterBankName(decl.name.clone()));
+                continue;
             }
             let mut signals = Vec::new();
             let mut defaults = HashMap::new();
@@ -520,25 +555,44 @@ impl Program {
                 out_name.push('_');
                 in_name.push_str(register.name.as_str());
                 out_name.push_str(register.name.as_str());
-                // FIXME: better errors if failure here
-                let value = register.default.evaluate(&constants)?;
-                // FIXME: better error
-                if None == value.width.combine(register.width) {
-                    // FIXME: accumulate errors?
-                    return Err(Error::MismatchedRegisterDefaultWidths {
+                let mut found_error = false;
+                // FIXME: redundant with code in resolve_constants()
+                for referenced in register.default.referenced_wires() {
+                    if wires.contains_key(referenced) && !constants.contains_key(referenced) {
+                        found_error = true;
+                        for expr in register.default.find_references(referenced).into_iter() {
+                            errors.push(Error::NonConstantWireRead(String::from(referenced), expr));
+                        }
+                    }
+                }
+                if defaults.contains_key(&out_name) {
+                    found_error = true;
+                    errors.push(Error::DuplicateRegister {
                         bank: decl.name.clone(),
                         register_name: register.name.clone(),
-                        register_width: register.width,
-                        default_expression: register.default.clone(),
-                        expression_width: value.width,
                     });
-
                 }
-                defaults.insert(out_name.clone(), value.as_width(register.width));
-                debug!("Generated wires {} and {} for register", in_name, out_name);
-                signals.push((in_name, out_name, register.width));
+                if found_error {
+                    continue;
+                }
+                match register.default.evaluate(&constants) {
+                    Ok(value) => {
+                        if None == value.width.combine(register.width) {
+                            errors.push(Error::MismatchedRegisterDefaultWidths {
+                                bank: decl.name.clone(),
+                                register_name: register.name.clone(),
+                                register_width: register.width,
+                                default_expression: register.default.clone(),
+                                expression_width: value.width,
+                            });
+                        }
+                        defaults.insert(out_name.clone(), value.as_width(register.width));
+                        debug!("Generated wires {} and {} for register", in_name, out_name);
+                        signals.push((in_name, out_name, register.width));
+                    },
+                    Err(e) => { errors.push(e); }
+                }
             }
-            // FIXME: detect redefinition of signals
             register_banks.push(RegisterBank {
                 label: decl.name.clone(),
                 signals: signals,
@@ -574,7 +628,7 @@ impl Program {
             for fixed in &fixed_functions {
                 for decl in &fixed.out_wire {
                     if wires.contains_key(decl.name.as_str()) {
-                        return Err(Error::RedefinedBuiltinWire(decl.name.clone()));
+                        errors.push(Error::RedefinedBuiltinWire(decl.name.clone()));
                     }
                     wires.insert(decl.name.as_str(), decl.width);
                 }
@@ -583,7 +637,7 @@ impl Program {
             // Step 4: Check for missing wires
             for name in needed_wires {
                 if !assignments.contains_key(name) {
-                    return Err(Error::UnsetWire(String::from(name)));
+                    errors.push(Error::UnsetWire(String::from(name)));
                 }
             }
 
@@ -591,6 +645,10 @@ impl Program {
             for key in constants_raw.keys() {
                 known_values.insert(*key);
                 wires.insert(key, constants.get(&String::from(*key)).unwrap().width);
+            }
+
+            if errors.len() > 0 {
+                return Err(Error::MultipleErrors(errors));
             }
 
             assignments_to_actions(&assignments, &wires,
@@ -853,9 +911,8 @@ impl RunningProgram {
     pub fn run_with_trace<W1: Write, W2: Write>(&mut self,
                 step_out: &mut W1, trace_out: &mut W2, dump_registers: bool) -> Result<(), Error> {
         while !self.done() {
-            self.step_with_trace(trace_out)?;
-            // FIXME: initial output?
             self.dump_y86(step_out, dump_registers)?;
+            self.step_with_trace(trace_out)?;
         }
         Ok(())
     }
@@ -962,12 +1019,11 @@ impl RunningProgram {
                    let number = self.values.get(number_wire).unwrap().bits.low64() as usize;
                    if number < self.registers.len() && number != self.zero_register {
                        self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
+                       writeln!(trace_out,
+                                "writing {}=0x{:x} into register {}={} ({})",
+                                in_port, self.registers[number],
+                                number_wire, number, self.name_register(number))?;
                    }
-                   // FIXME: different message for zero register
-                   writeln!(trace_out,
-                            "writing {}=0x{:x} into register {}={} ({})",
-                            in_port, self.registers[number],
-                            number_wire, number, self.name_register(number))?;
                },
             }
         }

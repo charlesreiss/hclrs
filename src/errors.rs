@@ -28,10 +28,16 @@ pub enum Error {
         default_expression: SpannedExpr,
         expression_width: WireWidth,
     },
+    // FIXME: location of definitions?
+    DuplicateRegister {
+        bank: String,
+        register_name: String,
+    },
     RuntimeMismatchedWidths(),
     // FIXME: should have span of assignment name, not assigned value
     UndefinedWireAssigned(String, SpannedExpr),
     UndefinedWireRead(String, SpannedExpr),
+    NonConstantWireRead(String, SpannedExpr),
     // FIXME location of definition?
     UnsetWire(String),
     // FIXME: add locations of definitions?
@@ -140,6 +146,10 @@ impl Error {
                 write!(output, "{}", contents.show_region(default_expression.span.0, default_expression.span.1));
                       
             },
+            Error::DuplicateRegister { ref bank, ref register_name } => {
+                error(output, &format!(
+                    "Register '{}' in bank '{}' defined twice.", register_name, bank));
+            },
             Error::RuntimeMismatchedWidths() => {
                 error(output, &format!("Unexpected wire width disagreement."));
             },
@@ -157,12 +167,19 @@ impl Error {
                             name));
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
             },
+            Error::NonConstantWireRead(ref name, ref expr) => {
+                // TODO: suggestions for wire meant?
+                error(output, &format!(
+                            "Usage of non-constant wire '{}' in initial or constant value:",
+                            name));
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+            },
             Error::UnsetWire(ref name) => {
                 error(output, &format!(
                             "Wire '{}' (possibly built-in) defined but never assigned.",
                             name));
             }
-            // FIXME: this error appears unused
+            // FIXME: add where this error happens
             Error::RedefinedWire(ref name) => {
                 error(output, &format!("Wire '{}' redefined.", name));
             },
@@ -307,11 +324,12 @@ impl error::Error for Error {
             Error::MismatchedMuxWidths(_, _) => "mismatched mux option widths",
             Error::MismatchedExprWidths(_, _, _, _) => "mismatched widths in expression",
             Error::MismatchedWireWidths(_, _, _, _) => "mismatched width between assignment value and wire",
-            Error::MismatchedRegisterDefaultWidths {..} =>
-                "mismatched width in default value for register",
+            Error::MismatchedRegisterDefaultWidths {..} => "mismatched width in default value for register",
+            Error::DuplicateRegister {..} => "duplicate register in register bank",
             Error::RuntimeMismatchedWidths() => "mismatched width detected while evaluating expression",
             Error::UndefinedWireAssigned(_,_) => "undefined wire assigned",
             Error::UndefinedWireRead(_,_) => "undefined wire read",
+            Error::NonConstantWireRead(_,_) => "non-constant wire read",
             Error::UnsetWire(_) => "wire defined but never assigned",
             Error::RedefinedWire(_) => "multiply defined wire found",
             Error::RedefinedBuiltinWire(_) => "redefined wire from fixed functionality",

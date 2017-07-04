@@ -5,7 +5,6 @@ use std::str;
 
 use errors::Error;
 
-// FIXME: untested code; use this to make good error messages
 pub struct FileContents {
     data: String,
     filenames: Vec<(usize, String)>,
@@ -44,7 +43,6 @@ impl FileContents {
         let filename = path.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or(String::from("<unknown>"));
         let mut file_bytes = Vec::new();
         file_reader.read_to_end(&mut file_bytes)?;
-        // FIXME: error if bytes aren't UTF-8?
         match str::from_utf8(&file_bytes) {
             Ok(_) => {},
             Err(bad_utf8) => {
@@ -111,6 +109,7 @@ impl FileContents {
         let mut result = String::new();
         // FIXME: variable width line count
         // FIXME: ascii art!
+        // FIXME: color?
         result.push_str(&format!("     -> {}:{}\n", filename, begin_line_no));
         result.push_str(         "     |\n");
         let mut number = begin_line_no;
