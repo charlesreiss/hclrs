@@ -268,6 +268,16 @@ impl Error {
                 error(output, &format!("Unexpected token '{}':", token));
                 write!(output, "{}", contents.show_region(span.0, span.1));
             },
+            Error::WireLoop(ref lst) => {
+                error(output, &format!("Circular dependency detected:"));
+                for i in 0..lst.len() {
+                    // FIXME: show code snippets of dependency?
+                    error_continue(output, &format!("  '{}' depends on '{}'{}",
+                        &lst[i], &lst[(i+1)%lst.len()],
+                        if i == lst.len() - 1 { "" } else { " and" }
+                        ));
+                }
+            },
             _ => {
                 error(output, &format!("{:?}", *self));
             }

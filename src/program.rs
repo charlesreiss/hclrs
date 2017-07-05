@@ -16,7 +16,7 @@ struct Graph<T> {
     num_edges: usize,
 }
 
-impl<T: Eq + Hash + Clone + Debug> Graph<T> {
+impl<T: PartialEq + Eq + Hash + Clone + Debug> Graph<T> {
     fn add_node(&mut self, node: T) {
         self.nodes.insert(node);
     }
@@ -36,6 +36,14 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         return self.nodes.contains(&node);
     }
 
+    #[cfg(test)]
+    fn contains_edge(&self, from: &T, to: &T) -> bool {
+        match self.edges.get(&from) {
+            Some(set) => set.contains(&to),
+            None => false,
+        }
+    }
+
     fn in_edges(&self, to: &T) -> HashSet<T> {
         if let Some(result) = self.edges_inverted.get(to) {
             result.clone()
@@ -44,7 +52,6 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         }
     }
 
-    #[cfg(test)]
     fn out_edges(&self, to: &T) -> HashSet<T> {
         if let Some(result) = self.edges.get(to) {
             result.clone()
@@ -53,6 +60,51 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         }
     }
 
+    fn find_cycle(&self) -> Vec<T> {
+        let mut stack: VecDeque<(Option<T>, T)> = VecDeque::new();
+        let mut parents: HashMap<T, Option<T>> = HashMap::new();
+        for node in &self.nodes {
+            stack.push_back((None, node.clone()));
+        }
+        while let Some((maybe_parent, cur)) = stack.pop_front() {
+            debug!("queue {:?}; processing {:?}->{:?}", stack, maybe_parent, cur);
+            if parents.get(&cur).is_none() {
+                for out in &self.out_edges(&cur) {
+                    debug!("enqueue {:?} from {:?}", out, cur);
+                    stack.push_front((Some(cur.clone()), out.clone()));
+                }
+            }
+            let mut found_other_parent = false;
+            if let Some(ref parent) = maybe_parent {
+                if parents.contains_key(&cur) {
+                    found_other_parent = true;
+                    // see if this was a back-edge
+                    debug!("checking for backwards edge to {:?} via {:?}", cur, parent);
+                    let mut back_path = vec!(parent.clone());
+                    while *back_path.last().unwrap() != cur {
+                        if let Some(&Some(ref grandparent)) = parents.get(back_path.last().unwrap()) {
+                            back_path.push(grandparent.clone());
+                        } else {
+                            break;
+                        }
+                    }
+                    // back_path is parent <- ... <- cur and there is an edge
+                    // cur <- parent
+                    if *back_path.last().unwrap() == cur {
+                        let mut forward_path = back_path;
+                        forward_path.reverse();
+                        return forward_path;
+                    }
+                }
+            }
+            if !found_other_parent {
+                parents.insert(cur.clone(), maybe_parent.clone());
+                debug!("parent set for {:?}", cur);
+            }
+            assert!(parents.get(&cur).is_some());
+        }
+        panic!("find_cycle() called when no cycle present");
+    }
 
     // topological sort, or find cycle
     fn topological_sort(&self) -> Result<Vec<T>, Vec<T>> {
@@ -96,8 +148,7 @@ impl<T: Eq + Hash + Clone + Debug> Graph<T> {
         }
 
         if visited.len() != self.num_edges {
-            // FiXME: found a cycle, return
-            unimplemented!();
+            return Err(self.find_cycle());
         }
 
         Ok(result)
@@ -250,26 +301,28 @@ fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<Stri
     if errors.len() > 0 {
         return Err(Error::MultipleErrors(errors));
     }
-    if let Ok(sorted) = graph.topological_sort() {
-        let mut results = HashMap::new();
-        for name in sorted {
-            match exprs.get(&name).unwrap().evaluate(&results) {
-                Ok(value) => {
-                    results.insert(
-                        String::from(name),
-                        value
-                    );
-                },
-                Err(e) => { errors.push(e); },
+    match graph.topological_sort() {
+        Ok(sorted) => {
+            let mut results = HashMap::new();
+            for name in sorted {
+                match exprs.get(&name).unwrap().evaluate(&results) {
+                    Ok(value) => {
+                        results.insert(
+                            String::from(name),
+                            value
+                        );
+                    },
+                    Err(e) => { errors.push(e); },
+                }
             }
+            if errors.len() > 0 {
+                return Err(Error::MultipleErrors(errors));
+            }
+            Ok(results)
+        },
+        Err(cycle) => {
+            return Err(Error::WireLoop(cycle.into_iter().map(String::from).collect()));
         }
-        if errors.len() > 0 {
-            return Err(Error::MultipleErrors(errors));
-        }
-        Ok(results)
-    } else {
-        // FIXME: generate loop error
-        unimplemented!();
     }
 }
 
@@ -365,52 +418,54 @@ fn assignments_to_actions<'a>(
 
     let mut result = Vec::new();
 
-    if let Ok(sorted) = graph.topological_sort() {
-        // FIXME: covered is just a sanity-check, should be removeable
-        debug!("using order {:?}", sorted);
-        let mut covered = known_values.clone();
-        let mut errors = Vec::new();
-        for name in sorted {
-            debug!("processing {:?}", name);
-            match assignments.get(name) {
-                Some(expr) => {
-                    for in_name in expr.referenced_wires() {
-                        assert!(covered.contains(&in_name));
-                    }
-                    if let Some(the_width) = widths.get(name) {
-                        expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
-                        result.push(Action::Assign(
-                            String::from(name),
-                            (*expr).clone(),
-                            *the_width,
-                        ));
-                    } else {
-                        // FIXME: highlites the wrong part
-                        errors.push(Error::UndefinedWireAssigned(String::from(name), (*expr).clone()));
-                    }
-                },
-                None => {
-                    match fixed_by_output.get(name) {
-                        Some(fixed) => {
-                            for in_name in &fixed.in_wires {
-                                assert!(covered.contains(in_name.name.as_str()));
+    match graph.topological_sort() {
+        Ok(sorted) => {
+            // FIXME: covered is just a sanity-check, should be removeable
+            debug!("using order {:?}", sorted);
+            let mut covered = known_values.clone();
+            let mut errors = Vec::new();
+            for name in sorted {
+                debug!("processing {:?}", name);
+                match assignments.get(name) {
+                    Some(expr) => {
+                        for in_name in expr.referenced_wires() {
+                            assert!(covered.contains(&in_name));
+                        }
+                        if let Some(the_width) = widths.get(name) {
+                            expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
+                            result.push(Action::Assign(
+                                String::from(name),
+                                (*expr).clone(),
+                                *the_width,
+                            ));
+                        } else {
+                            // FIXME: highlites the wrong part
+                            errors.push(Error::UndefinedWireAssigned(String::from(name), (*expr).clone()));
+                        }
+                    },
+                    None => {
+                        match fixed_by_output.get(name) {
+                            Some(fixed) => {
+                                for in_name in &fixed.in_wires {
+                                    assert!(covered.contains(in_name.name.as_str()));
+                                }
+                                result.push(fixed.action.clone());
+                            },
+                            None => {
+                                errors.push(Error::UnsetWire(String::from(name)));
                             }
-                            result.push(fixed.action.clone());
-                        },
-                        None => {
-                            errors.push(Error::UnsetWire(String::from(name)));
                         }
                     }
                 }
+                covered.insert(name);
             }
-            covered.insert(name);
+            if errors.len() > 0 {
+                return Err(Error::MultipleErrors(errors))
+            }
+        },
+        Err(cycle) => {
+            return Err(Error::WireLoop(cycle.into_iter().map(String::from).collect()));
         }
-        if errors.len() > 0 {
-            return Err(Error::MultipleErrors(errors))
-        }
-    } else {
-        // FIXME: generate loop error
-        unimplemented!();
     }
 
     for fixed in &fixed_no_output {
@@ -1220,17 +1275,26 @@ mod tests {
     use std::collections::hash_set::HashSet;
 
     fn verify_sort<T: Eq + Clone + Hash + Debug>(graph: &Graph<T>) {
-        if let Ok(the_result) = graph.topological_sort() {
-            let mut seen = HashSet::new();
-            for node in &the_result {
-                for other in graph.out_edges(&node) {
-                    assert!(!seen.contains(&other), "{:?} -> {:?} violates order {:?}",
-                        node, other, the_result);
+        match graph.topological_sort() {
+            Ok(the_result) => {
+                let mut seen = HashSet::new();
+                for node in &the_result {
+                    for other in graph.out_edges(&node) {
+                        assert!(!seen.contains(&other), "{:?} -> {:?} violates order {:?}",
+                            node, other, the_result);
+                    }
+                    seen.insert(node.clone());
                 }
-                seen.insert(node.clone());
+            },
+            Err(the_cycle) => {
+                assert!(the_cycle.len() > 0);
+                for i in 0..the_cycle.len() {
+                    assert!(graph.contains_edge(
+                        &the_cycle[i],
+                        &the_cycle[(i+1) % the_cycle.len()]
+                    ));
+                }
             }
-        } else {
-            assert!(false);
         }
     }
 
@@ -1248,6 +1312,78 @@ mod tests {
         graph.insert("quux", "other");
         verify_sort(&graph);
         graph.add_node("unused");
+        verify_sort(&graph);
+    }
+
+    #[test]
+    fn graph_simple_cycle() {
+        init_logger();
+        let mut graph = Graph::new();
+        graph.insert("foo", "bar");
+        graph.insert("bar", "baz");
+        graph.insert("baz", "foo");
+        verify_sort(&graph);
+        graph.add_node("unused");
+        verify_sort(&graph);
+        graph.insert("baz", "quux");
+        verify_sort(&graph);
+        graph.insert("bar", "foo");
+        verify_sort(&graph);
+    }
+
+    #[test]
+    fn graph_3cycle() {
+        init_logger();
+        let mut graph = Graph::new();
+        graph.insert("foo", "bar");
+        graph.insert("bar", "baz");
+        graph.insert("baz", "foo");
+        verify_sort(&graph);
+        graph.add_node("unused");
+        verify_sort(&graph);
+        graph.insert("baz", "quux");
+        verify_sort(&graph);
+        graph.insert("bar", "foo");
+        verify_sort(&graph);
+    }
+
+    #[test]
+    fn graph_2cycle() {
+        init_logger();
+        let mut graph = Graph::new();
+        graph.insert("foo", "bar");
+        graph.insert("bar", "foo");
+        verify_sort(&graph);
+        graph.insert("bar", "baz");
+        verify_sort(&graph);
+        graph.add_node("unused");
+        verify_sort(&graph);
+        graph.insert("baz", "quux");
+        verify_sort(&graph);
+    }
+
+    #[test]
+    fn graph_complex_cycle() {
+        init_logger();
+        let mut graph = Graph::new();
+        graph.insert("root", "A1");
+        graph.insert("A1", "A2");
+        graph.insert("A2", "A3");
+        graph.insert("root", "B1");
+        graph.insert("B1", "B2");
+        graph.insert("B2", "B3");
+        graph.insert("B3", "A1");
+        graph.insert("A1", "B2");
+    }
+
+    #[test]
+    fn graph_self_cycle() {
+        init_logger();
+        let mut graph = Graph::new();
+        graph.insert("foo", "foo");
+        verify_sort(&graph);
+        graph.insert("foo", "bar");
+        graph.insert("bar", "baz");
         verify_sort(&graph);
     }
 
@@ -1277,4 +1413,5 @@ mod tests {
             WireValue { bits: u128::new(0x89AB), width: WireWidth::Bits(16) }
         );
     }
+
 }
