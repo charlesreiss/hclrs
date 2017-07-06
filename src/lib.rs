@@ -44,8 +44,3 @@ pub fn parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
     }
     Program::new_y86(statements)
 }
-
-pub fn format_error<W: Write>(output: &mut W, contents: &FileContents, error: &Error) -> Result<(), Error> {
-    write!(output, "{:?}", error)?;
-    Ok(())
-}
