@@ -12,11 +12,11 @@ pub struct FileContents {
 }
 
 fn mark_newlines(offset: usize, newlines_list: &mut Vec<(usize, usize)>, data: &str) {
-    newlines_list.push((offset + 0, 1));
+    newlines_list.push((offset, 1));
     let mut index = 1;
     for (i, _) in data.match_indices('\n') {
         index += 1;
-        newlines_list.push((offset + i, index));
+        newlines_list.push((offset + i + 1, index));
     }
 }
 
@@ -73,7 +73,7 @@ impl FileContents {
         };
         let next_line_loc = if index == self.newlines.len() - 1 { self.data.len() } else { self.newlines[index + 1].0 };
         let cur_line = self.newlines[index];
-        (cur_line.1, cur_line.0 + 1, next_line_loc)
+        (cur_line.1, cur_line.0, next_line_loc)
     }
 
     pub fn line(&self, index: usize) -> usize {
@@ -103,7 +103,7 @@ impl FileContents {
         let (end_line_no, begin_last_line, end_loc) = self.line_number_and_bounds(end);
 
         let begin_line_offset = start - begin_loc;
-        let end_line_offset = end_loc - begin_last_line - 1;
+        let end_line_offset = end - begin_last_line;
 
         let segment = &self.data[begin_loc..end_loc];
         let mut result = String::new();
@@ -118,7 +118,7 @@ impl FileContents {
             let this_start = if number == begin_line_no { begin_line_offset } else { 0 };
             let this_end = if number == end_line_no { end_line_offset } else { line.len() };
             result.push_str(&format!("{:>4} | {}\n", number, line));
-            result.push_str(&format!("     | {}{}\n", 
+            result.push_str(&format!("     | {}{}\n",
                 " ".repeat(this_start),
                 "^".repeat(this_end - this_start)));
             number += 1;
@@ -133,7 +133,7 @@ mod tests {
     use super::super::tests::init_logger;
 
     #[test]
-    fn show_region() {
+    fn show_region_1() {
         init_logger();
         let test_file =
 "This is the first line.
@@ -142,12 +142,35 @@ This is the third line.";
         let contents = FileContents::new_from_data("\n", test_file, "example.name");
         let first_loc = contents.data().find("first").unwrap();
         let line_loc = contents.data().find(".").unwrap();
+        assert_eq!(&contents.data()[first_loc..line_loc], "first line");
 
-        let reference = 
+        let reference =
 "     -> example.name:1
      |
    1 | This is the first line.
      |             ^^^^^^^^^^
+";
+        let actual = contents.show_region(first_loc, line_loc);
+        debug!("reference:\n{}actual:\n{}", reference, actual);
+        assert_eq!(actual, reference);
+    }
+
+    #[test]
+    fn show_region_2() {
+        init_logger();
+        let test_file =
+"This is the first line.
+This is the second line.
+This is the third line.";
+        let contents = FileContents::new_from_data("\n", test_file, "example.name");
+        let first_loc = contents.data().find("second").unwrap();
+        let line_loc = contents.data().find("second line.").unwrap() + 11;
+
+        let reference =
+"     -> example.name:2
+     |
+   2 | This is the second line.
+     |             ^^^^^^^^^^^
 ";
         let actual = contents.show_region(first_loc, line_loc);
         debug!("reference:\n{}actual:\n{}", reference, actual);
