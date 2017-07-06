@@ -31,7 +31,7 @@ pub enum Error {
     },
     RuntimeMismatchedWidths(),
     // FIXME: should have span of assignment name, not assigned value
-    UndefinedWireAssigned(String, SpannedExpr),
+    UndefinedWireAssigned(String, Span),
     UndefinedWireRead(String, SpannedExpr),
     NonConstantWireRead(String, SpannedExpr),
     // FIXME location of definition?
@@ -156,12 +156,12 @@ impl Error {
             Error::RuntimeMismatchedWidths() => {
                 error(output, &format!("Unexpected wire width disagreement."))?;
             },
-            Error::UndefinedWireAssigned(ref name, ref expr) => {
+            Error::UndefinedWireAssigned(ref name, ref span) => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
                             "Undefined wire '{}' assigned value:",
                             name))?;
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             Error::UndefinedWireRead(ref name, ref expr) => {
                 // TODO: suggestions for wire meant?

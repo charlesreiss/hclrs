@@ -328,6 +328,7 @@ fn assignments_to_actions<'a>(
         known_values: &'a HashSet<&'a str>,
         fixed_functions: &'a Vec<FixedFunction>,
         wire_decl_spans: &'a HashMap<&'a str, Span>,
+        assign_spans: &'a HashMap<&'a str, Span>,
     ) -> Result<Vec<Action>, Error> {
     let mut fixed_by_output = HashMap::new();
     let mut fixed_no_output = Vec::new();
@@ -436,8 +437,8 @@ fn assignments_to_actions<'a>(
                                 *the_width,
                             ));
                         } else {
-                            // FIXME: highlites the wrong part
-                            errors.push(Error::UndefinedWireAssigned(String::from(name), (*expr).clone()));
+                            errors.push(Error::UndefinedWireAssigned(
+                                String::from(name), *assign_spans.get(name).unwrap()));
                         }
                     },
                     None => {
@@ -573,7 +574,6 @@ impl Program {
                 Statement::Assignments(ref assigns) => {
                     for assign in assigns {
                         for &(ref name, ref span) in &assign.names {
-                            // FIXME: detect multiple declarations
                             if assign_spans.contains_key(name.as_str()) {
                                 errors.push(
                                     Error::DoubleAssignedWire(
@@ -754,7 +754,7 @@ impl Program {
             //        can we be assured all errors that need that will be caught above?
             assignments_to_actions(&assignments, &wires,
                                    &known_values, &fixed_functions,
-                                   &wire_decl_spans)?
+                                   &wire_decl_spans, &assign_spans)?
         };
 
         Ok(Program {
