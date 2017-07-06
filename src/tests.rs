@@ -261,10 +261,10 @@ fn parse_constdecls() {
     assert_eq!(
         parse_ConstDecls_str(&mut errors, "const x = 0x42, y=0").unwrap(),
         vec!(
-            ConstDecl { name: String::from("x"), value: SpannedExpr::new( (10, 14),
+            ConstDecl { name: String::from("x"), name_span: (6, 7), value: SpannedExpr::new( (10, 14),
                 Expr::Constant(WireValue::from_hexadecimal("42"))
             ) },
-            ConstDecl { name: String::from("y"), value: SpannedExpr::new( (18, 19),
+            ConstDecl { name: String::from("y"), name_span: (16, 17), value: SpannedExpr::new( (18, 19),
                 Expr::Constant(WireValue::from_decimal("0"))
             ) }
         )

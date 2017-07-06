@@ -2,7 +2,7 @@ use extprim::u128::u128;
 use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue,
           BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement, SpannedExpr};
 use errors::Error;
-use lexer::Tok;
+use lexer::{Span, Tok};
 use lalrpop_util::{ErrorRecovery, ParseError};
 
 // ErrorRecovery< locationType, tokenType, errorType >
@@ -102,7 +102,7 @@ pub WireDecls : Vec<WireDecl> = {
 };
 
 ConstDecl : ConstDecl = {
-    <name:ID> "=" <e:Expr> => ConstDecl { name: String::from(name), value: e }
+    <name:IDWithSpan> "=" <e:Expr> => ConstDecl { name: String::from(name.1), name_span: name.0, value: e }
 };
 
 // public for testing
@@ -217,11 +217,17 @@ pub Expr: SpannedExpr = {
     ExprLogicalOr,
 };
 
+IDWithSpan : (Span, &'input str) = {
+    <start:@R> <n:ID> <end:@L> => {
+        ((start,end), n)
+    },
+};
+
 Assignment : Assignment = {
-    <start:@R> <n:(<ID> "=")+> <v:Expr> <end:@L> => {
-        let mut names: Vec<String> = Vec::new();
+    <start:@R> <n:(<IDWithSpan> "=")+> <v:Expr> <end:@L> => {
+        let mut names: Vec<(String, Span)> = Vec::new();
         for name in n {
-            names.push(String::from(name));
+            names.push((String::from(name.1), name.0));
         }
         Assignment { span: (start,end), names: names, value: v }
     }

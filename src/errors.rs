@@ -35,10 +35,12 @@ pub enum Error {
     UndefinedWireRead(String, SpannedExpr),
     NonConstantWireRead(String, SpannedExpr),
     // FIXME location of definition?
-    UnsetWire(String),
-    // FIXME: add locations of definitions?
-    RedefinedWire(String),
-    RedefinedBuiltinWire(String),
+    UnsetWire(String, Span),
+    UnsetBuiltinWire(String),
+    RedeclaredWire(String, Span, Span),
+    DoubleAssignedWire(String, Span, Span),
+    DoubleAssignedFixedOutWire(String, Span),
+    RedeclaredBuiltinWire(String, Span),
     PartialFixedInput(String),
     // FIXME: generate
     WireLoop(Vec<String>),
@@ -175,18 +177,38 @@ impl Error {
                             name))?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
-            Error::UnsetWire(ref name) => {
+            Error::UnsetWire(ref name, ref span) => {
                 error(output, &format!(
-                            "Wire '{}' (possibly built-in) defined but never assigned.",
+                            "Wire '{}' never assigned but defined here:",
                             name))?;
-            }
-            // FIXME: add where this error happens
-            Error::RedefinedWire(ref name) => {
-                error(output, &format!("Wire '{}' redefined.", name))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            },
+            Error::UnsetBuiltinWire(ref name) => {
+                error(output, &format!(
+                            "Wire '{}' required by fixed functionality but never assigned.",
+                            name))?;
             },
             // FIXME: add where this error happens
-            Error::RedefinedBuiltinWire(ref name) => {
-                error(output, &format!("Builtin wire '{}' redefined.", name))?;
+            Error::RedeclaredWire(ref name, ref new_span, ref old_span) => {
+                error(output, &format!("Wire '{}' redeclared. Declared here:", name))?;
+                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
+                error_continue(output, "After being declarted here here:")?;
+                write!(output, "{}", contents.show_region(old_span.0, old_span.1))?;
+            },
+            Error::DoubleAssignedWire(ref name, ref new_span, ref old_span) => {
+                error(output, &format!("Wire '{}' assigned twice. Assigned here:", name))?;
+                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
+                error_continue(output, "After being assigned here:")?;
+                write!(output, "{}", contents.show_region(old_span.0, old_span.1))?;
+            },
+            Error::DoubleAssignedFixedOutWire(ref name, ref new_span) => {
+                error(output, &format!("Wire '{}' is output for fixed functionality but is assigned here:", name))?;
+                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
+            },
+            // FIXME: add where this error happens
+            Error::RedeclaredBuiltinWire(ref name, ref new_span) => {
+                error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
+                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
             },
             Error::PartialFixedInput(ref name) => {
                 // FIXME: error should identify missing input
@@ -341,9 +363,12 @@ impl error::Error for Error {
             Error::UndefinedWireAssigned(_,_) => "undefined wire assigned",
             Error::UndefinedWireRead(_,_) => "undefined wire read",
             Error::NonConstantWireRead(_,_) => "non-constant wire read",
-            Error::UnsetWire(_) => "wire defined but never assigned",
-            Error::RedefinedWire(_) => "multiply defined wire found",
-            Error::RedefinedBuiltinWire(_) => "redefined wire from fixed functionality",
+            Error::UnsetWire(_,_) => "wire defined but never assigned",
+            Error::UnsetBuiltinWire(_) => "builtin wire required but never assigned",
+            Error::DoubleAssignedWire(_,_,_) => "multiply assigned wire found",
+            Error::DoubleAssignedFixedOutWire(_,_) => "wire assigned by fixed functionality also assigned manually",
+            Error::RedeclaredWire(_,_,_) => "multiply defined wire found",
+            Error::RedeclaredBuiltinWire(_,_) => "redefined wire from fixed functionality",
             Error::PartialFixedInput(_) => "part of fixed functionality set, but not all",
             Error::WireLoop(_) => "circular dependency between wires found",
             Error::InvalidWireWidth(_) => "wire width out of range",

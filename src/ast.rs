@@ -214,6 +214,7 @@ impl WireDecl {
 #[derive(Debug,Eq,PartialEq)]
 pub struct ConstDecl {
     pub name: String,
+    pub name_span: Span,
     pub value: SpannedExpr,
 }
 
@@ -708,7 +709,7 @@ fn referenced_wires() {
 #[derive(Debug,Eq,PartialEq)]
 pub struct Assignment {
     pub span: Span,
-    pub names: Vec<String>,
+    pub names: Vec<(String, Span)>,
     pub value: SpannedExpr,
 }
 

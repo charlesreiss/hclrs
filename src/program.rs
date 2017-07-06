@@ -1,6 +1,7 @@
 use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr};
 use extprim::u128::u128;
 use errors::Error;
+use lexer::Span;
 use y86_disasm::{disassemble_to_string, name_register};
 use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
@@ -326,6 +327,7 @@ fn assignments_to_actions<'a>(
         widths: &'a HashMap<&'a str, WireWidth>,
         known_values: &'a HashSet<&'a str>,
         fixed_functions: &'a Vec<FixedFunction>,
+        wire_decl_spans: &'a HashMap<&'a str, Span>,
     ) -> Result<Vec<Action>, Error> {
     let mut fixed_by_output = HashMap::new();
     let mut fixed_no_output = Vec::new();
@@ -345,19 +347,19 @@ fn assignments_to_actions<'a>(
         let mut missing_inputs: Vec<&str> = Vec::new();
         for in_name in &fixed.in_wires {
             if known_values.contains(in_name.name.as_str()) {
-                return Err(Error::RedefinedBuiltinWire(in_name.name.clone()));
+                panic!("unexpected duplicate definition of {}", in_name.name.as_str());
             }
             if !assignments.contains_key(in_name.name.as_str()) {
                 missing_inputs.push(in_name.name.as_str());
             }
         }
         if fixed.mandatory && missing_inputs.len() > 0 {
-            let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(String::from(*x))).collect();
+            let missing_list = missing_inputs.iter().map(|x| Error::UnsetBuiltinWire(String::from(*x))).collect();
             return Err(Error::MultipleErrors(missing_list));
         } else if missing_inputs.len() > 0 {
             if let Some(ref decl) = fixed.out_wire {
                 if graph.contains_node(&decl.name.as_str()) {
-                    let missing_list = missing_inputs.iter().map(|x| Error::UnsetWire(String::from(*x))).collect();
+                    let missing_list = missing_inputs.iter().map(|x| Error::UnsetBuiltinWire(String::from(*x))).collect();
                     return Err(Error::MultipleErrors(missing_list));
                 }
             }
@@ -378,7 +380,7 @@ fn assignments_to_actions<'a>(
             Some(ref decl) => {
                 if known_values.contains(decl.name.as_str()) ||
                    assignments.contains_key(decl.name.as_str()) {
-                    return Err(Error::RedefinedBuiltinWire(decl.name.clone()));
+                    panic!("unexpected duplicate definition of {}", decl.name);
                 }
                 fixed_by_output.insert(decl.name.as_str(), fixed);
                 for in_name in &fixed.in_wires {
@@ -447,7 +449,14 @@ fn assignments_to_actions<'a>(
                                 result.push(fixed.action.clone());
                             },
                             None => {
-                                errors.push(Error::UnsetWire(String::from(name)));
+                                match wire_decl_spans.get(name) {
+                                    Some(span) => {
+                                        errors.push(Error::UnsetWire(String::from(name), *span));
+                                    },
+                                    None => {
+                                        errors.push(Error::UnsetBuiltinWire(String::from(name)));
+                                    },
+                                }
                             }
                         }
                     }
@@ -496,6 +505,26 @@ const TRUE = 1;
 const FALSE = 0;
 ";
 
+fn check_double_declare<'a, 'b>(errors: &'b mut Vec<Error>, name: &'a str, span: Span,
+                       wire_decl_spans: &'b mut HashMap<&'a str, Span>,
+                       wires: &'b HashMap<&'a str, WireWidth>) {
+    match wire_decl_spans.get(name) {
+        Some(other_span) => {
+            errors.push(
+                Error::RedeclaredWire(String::from(name), span, *other_span)
+            );
+        },
+        None => {
+            if wires.contains_key(name) {
+                errors.push(
+                    Error::RedeclaredBuiltinWire(String::from(name), span)
+                );
+            }
+        },
+    }
+    wire_decl_spans.insert(name, span);
+}
+
 impl Program {
     pub fn new_y86(statements: Vec<Statement>) -> Result<Program, Error> {
         Program::new(statements, y86_fixed_functions())
@@ -508,37 +537,59 @@ impl Program {
         // Step 1: Split statements into constant declarations, wire declarations, assignments
         let mut constants_raw: HashMap<&str, &SpannedExpr> = HashMap::new();
         let mut wires = HashMap::new();
+        let mut wire_decl_spans = HashMap::new();
+        let mut assign_spans = HashMap::new();
         let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
         let mut register_banks_raw = Vec::new();
+        let mut fixed_out_wires = HashSet::new();
         let mut errors = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
                 wires.insert(in_wire.name.as_str(), in_wire.width);
             }
+            for ref decl in &fixed.out_wire {
+                wires.insert(decl.name.as_str(), decl.width);
+                fixed_out_wires.insert(decl.name.as_str());
+            }
         }
-        // FIXME: detect duplicates somewhere here
         for statement in &statements {
             match *statement {
                 Statement::ConstDecls(ref decls) => {
                     for ref decl in decls {
+                        check_double_declare(&mut errors, decl.name.as_str(), decl.name_span,
+                                        &mut wire_decl_spans, &wires);
                         constants_raw.insert(decl.name.as_str(), &decl.value);
                     }
                 },
                 Statement::WireDecls(ref decls) => {
                     for ref decl in decls {
+                        check_double_declare(&mut errors, decl.name.as_str(), decl.span,
+                                        &mut wire_decl_spans, &wires);
                         wires.insert(decl.name.as_str(), decl.width);
                         needed_wires.insert(decl.name.as_str());
                     }
                 },
                 Statement::Assignments(ref assigns) => {
                     for assign in assigns {
-                        for name in &assign.names {
+                        for &(ref name, ref span) in &assign.names {
                             // FIXME: detect multiple declarations
-                            if assignments.contains_key(name.as_str()) {
-                                errors.push(Error::RedefinedWire(name.clone()));
+                            if assign_spans.contains_key(name.as_str()) {
+                                errors.push(
+                                    Error::DoubleAssignedWire(
+                                        name.clone(), *span,
+                                        *assign_spans.get(name.as_str()).unwrap(),
+                                    )
+                                );
+                            } else if fixed_out_wires.contains(name.as_str()) {
+                                errors.push(
+                                    Error::DoubleAssignedFixedOutWire(
+                                        name.clone(), *span,
+                                    )
+                                );
                             }
                             assignments.insert(name.as_str(), &assign.value);
+                            assign_spans.insert(name.as_str(), span.clone());
                         }
                     }
                 },
@@ -675,19 +726,17 @@ impl Program {
                 wires.insert(bank.bubble_signal.as_str(), WireWidth::Bits(1));
             }
 
-            for fixed in &fixed_functions {
-                for decl in &fixed.out_wire {
-                    if wires.contains_key(decl.name.as_str()) {
-                        errors.push(Error::RedefinedBuiltinWire(decl.name.clone()));
-                    }
-                    wires.insert(decl.name.as_str(), decl.width);
-                }
-            }
-
             // Step 4: Check for missing wires
             for name in needed_wires {
                 if !assignments.contains_key(name) {
-                    errors.push(Error::UnsetWire(String::from(name)));
+                    match wire_decl_spans.get(name) {
+                        Some(span) => {
+                            errors.push(Error::UnsetWire(String::from(name), *span));
+                        },
+                        None => {
+                            errors.push(Error::UnsetBuiltinWire(String::from(name)));
+                        },
+                    }
                 }
             }
 
@@ -701,8 +750,11 @@ impl Program {
                 return Err(Error::MultipleErrors(errors));
             }
 
+            // FIXME: do we actually need to pass wire_decl_spans, or
+            //        can we be assured all errors that need that will be caught above?
             assignments_to_actions(&assignments, &wires,
-                                   &known_values, &fixed_functions)?
+                                   &known_values, &fixed_functions,
+                                   &wire_decl_spans)?
         };
 
         Ok(Program {
