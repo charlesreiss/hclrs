@@ -1,6 +1,7 @@
 use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr};
 use extprim::u128::u128;
 use errors::Error;
+use y86_disasm::{disassemble_to_string, name_register};
 use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
 use std::collections::btree_map::BTreeMap;
@@ -162,7 +163,7 @@ pub enum Action {
         // register bank processing (done at beginning of cycle)
     Assign(String, SpannedExpr, WireWidth),
     ReadProgramRegister { number: String, out_port: String },
-    ReadMemory { is_read: Option<String>, address: String, out_port: String, bytes: u8 },
+    ReadMemory { is_read: Option<String>, address: String, out_port: String, bytes: u8, is_instruction: bool, },
     // these actions MUST be done last:
     WriteProgramRegister { number: String, in_port: String },
     WriteMemory { is_write: Option<String>, address: String, in_port: String, bytes: u8 },
@@ -222,7 +223,8 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 is_read: None,
                 address: String::from("pc"),
                 out_port: String::from("i10bytes"),
-                bytes: 10
+                bytes: 10,
+                is_instruction: true,
             },
             mandatory: true,
         },
@@ -236,7 +238,8 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 is_read: Some(String::from("mem_readbit")),
                 address: String::from("mem_addr"),
                 out_port: String::from("mem_output"),
-                bytes: 8
+                bytes: 8,
+                is_instruction: false,
             },
             mandatory: false,
         },
@@ -919,13 +922,6 @@ const Y86_STATUSES: [&'static str; 6] = [
     "5 (Pipeline Error)"
 ];
 
-const Y86_REGISTERS: [&'static str; 16] = [
-    "%rax", "%rcx", "%rdx", "%rbx",
-    "%rsp", "%rbp", "%rsi", "%rdi",
-    "%r8", "%r9", "%r10", "%r11",
-    "%r12", "%r13", "%r14", "NONE"
-];
-
 impl RunningProgram {
     pub fn new(program: Program,
                num_registers: usize,
@@ -952,14 +948,16 @@ impl RunningProgram {
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
-        self.run_with_trace(&mut sink(), &mut sink(), false)
+        self.run_with_trace(&mut sink(), &mut sink(), &mut sink(), false)
     }
 
-    pub fn run_with_trace<W1: Write, W2: Write>(&mut self,
-                step_out: &mut W1, trace_out: &mut W2, dump_registers: bool) -> Result<(), Error> {
+    pub fn run_with_trace<W1: Write, W2: Write, W3: Write>(&mut self,
+                step_out: &mut W1, trace_out: &mut W2,
+                disasm_out: &mut W3,
+                dump_registers: bool) -> Result<(), Error> {
         while !self.done() {
             self.dump_y86(step_out, dump_registers)?;
-            self.step_with_trace(trace_out)?;
+            self.step_with_trace(trace_out, disasm_out)?;
         }
         Ok(())
     }
@@ -978,14 +976,10 @@ impl RunningProgram {
 
     // FIXME: assumes Y86
     fn name_register(&self, i: usize) -> &'static str {
-        if (i as usize) < Y86_REGISTERS.len() {
-            return Y86_REGISTERS[i as usize];
-        } else {
-            return "unknown"
-        }
+        return name_register(i);
     }
 
-    pub fn step_with_trace<W: Write>(&mut self, trace_out: &mut W) -> Result<(), Error> {
+    pub fn step_with_trace<W1: Write, W2: Write>(&mut self, trace_out: &mut W1, disasm_out: &mut W2) -> Result<(), Error> {
         for action in &self.program.actions {
             debug!("processing action {:?}", action);
             match action {
@@ -1002,7 +996,7 @@ impl RunningProgram {
                       self.values.insert(name.clone(), result);
                   }
                },
-               &Action::ReadMemory { ref is_read, ref address, ref out_port, ref bytes } => {
+               &Action::ReadMemory { ref is_read, ref address, ref out_port, ref bytes, ref is_instruction } => {
                    // FIXME: instruction decoding
                    let do_read = match is_read {
                        &None => true,
@@ -1015,6 +1009,15 @@ impl RunningProgram {
                                 "{} set to 0x{:x} (reading {} bytes from memory at {}=0x{:x})",
                                 out_port, value, bytes, address, address_value.bits)?;
                        self.values.insert(out_port.clone(), value);
+                       if *is_instruction {
+                           write!(disasm_out, "pc = 0x{:x}; loaded [", address_value)?;
+                           let (num_bytes, instruction) = disassemble_to_string(value.bits);
+                           for i in 0..num_bytes {
+                               let cur_byte = ((value.bits >> (8 * i)) as u128).low64() & 0xFF;
+                               write!(disasm_out, "{:02x} ", cur_byte)?;
+                           }
+                           writeln!(disasm_out, ": {}]", instruction)?;
+                       }
                    } else {
                        writeln!(trace_out,
                                 "not reading from memory since {} is 0", is_read.clone().unwrap())?;
@@ -1085,7 +1088,7 @@ impl RunningProgram {
     pub fn values(&self) -> &WireValues { &self.values }
 
     pub fn step(&mut self) -> Result<(), Error> {
-        self.step_with_trace(&mut sink())
+        self.step_with_trace(&mut sink(), &mut sink())
     }
 
     pub fn status_or_default(&self, default: u8) -> u8 {

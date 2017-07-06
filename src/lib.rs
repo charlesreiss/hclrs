@@ -5,6 +5,7 @@ extern crate env_logger;
 extern crate lalrpop_util;
 extern crate extprim;
 
+mod y86_disasm;
 mod parser;
 mod ast;
 mod program;

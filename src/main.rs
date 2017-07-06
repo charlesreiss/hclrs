@@ -16,14 +16,15 @@ fn main() {
     main_real().unwrap();
 }
 
-fn run_y86<W1: Write, W2: Write>(file_contents: &FileContents, yo_path: &Path,
-           trace_out: &mut W1, step_out: &mut W2, dump_registers: bool, timeout: u32) -> Result<(), Error> {
+fn run_y86<W1: Write, W2: Write, W3: Write>(file_contents: &FileContents, yo_path: &Path,
+           trace_out: &mut W1, step_out: &mut W2,
+           disasm_out: &mut W3,  dump_registers: bool, timeout: u32) -> Result<(), Error> {
     let program = parse_y86_hcl(file_contents)?;
     let mut running_program = RunningProgram::new_y86(program);
     let mut yo_reader = BufReader::new(File::open(yo_path)?);
     running_program.set_timeout(timeout);
     running_program.load_memory_y86(&mut yo_reader)?;
-    running_program.run_with_trace(step_out, trace_out, dump_registers)?;
+    running_program.run_with_trace(step_out, trace_out, disasm_out, dump_registers)?;
     println!("{}", running_program.dump_y86_str(dump_registers));
     Ok(())
 }
@@ -50,8 +51,9 @@ fn main_real() -> Result<(), Error> {
         print_usage(&program_name, opts);
         return Ok(());
     }
-    let mut trace_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
-    let mut step_out: Box<Write> = if parsed_opts.opt_present("d") { Box::new(stdout()) } else { Box::new(sink()) };
+    let mut step_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
+    let mut disasm_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
+    let mut trace_out: Box<Write> = if parsed_opts.opt_present("d") { Box::new(stdout()) } else { Box::new(sink()) };
     let dump_registers = !parsed_opts.opt_present("t");
     let free_args = parsed_opts.free;
     if free_args.len() < 2 || free_args.len() > 3 {
@@ -72,7 +74,7 @@ fn main_real() -> Result<(), Error> {
     let path = Path::new(filename);
     let file_contents = read_y86_hcl(path)?;
     let yo_path = Path::new(yo_filename);
-    match run_y86(&file_contents, yo_path, &mut trace_out, &mut step_out, dump_registers, timeout) {
+    match run_y86(&file_contents, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout) {
         Err(e) => e.format_for_contents(&mut stderr(), &file_contents)?,
         _ => {},
     }
