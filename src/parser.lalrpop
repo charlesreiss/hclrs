@@ -102,7 +102,7 @@ pub WireDecls : Vec<WireDecl> = {
 };
 
 ConstDecl : ConstDecl = {
-    <name:IDWithSpan> "=" <e:Expr> => ConstDecl { name: String::from(name.1), name_span: name.0, value: e }
+    <name:IDWithSpan> "=" <e:Expr> => ConstDecl { name: String::from(name.0), name_span: name.1, value: e }
 };
 
 // public for testing
@@ -217,9 +217,9 @@ pub Expr: SpannedExpr = {
     ExprLogicalOr,
 };
 
-IDWithSpan : (Span, &'input str) = {
+IDWithSpan : (&'input str, Span) = {
     <start:@R> <n:ID> <end:@L> => {
-        ((start,end), n)
+        (n, (start,end))
     },
 };
 
@@ -227,7 +227,7 @@ Assignment : Assignment = {
     <start:@R> <n:(<IDWithSpan> "=")+> <v:Expr> <end:@L> => {
         let mut names: Vec<(String, Span)> = Vec::new();
         for name in n {
-            names.push((String::from(name.1), name.0));
+            names.push((String::from(name.0), name.1));
         }
         Assignment { span: (start,end), names: names, value: v }
     }
@@ -241,9 +241,10 @@ RegisterDecl : RegisterDecl = {
 };
 
 RegisterBankDecl : RegisterBankDecl = {
-    <start:@R> "register" <i:ID> "{" <r:Semicolons<RegisterDecl>> "}" <end:@L> => {
+    <start:@R> "register" <i:IDWithSpan> "{" <r:Semicolons<RegisterDecl>> "}" <end:@L> => {
         RegisterBankDecl {
-            name: String::from(i),
+            name: String::from(i.0),
+            name_span: i.1,
             registers: r,
             span: (start,end),
         }

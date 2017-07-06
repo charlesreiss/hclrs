@@ -632,13 +632,13 @@ impl Program {
             // FIXME: should really iterate over graphemes
             let name_chars: Vec<char> = decl.name.chars().collect();
             if name_chars.len() != 2 {
-                errors.push(Error::InvalidRegisterBankName(decl.name.clone()));
+                errors.push(Error::InvalidRegisterBankName(decl.name.clone(), decl.name_span));
                 continue;
             }
             let in_prefix = name_chars[0];
             let out_prefix = name_chars[1];
             if !in_prefix.is_lowercase() || !out_prefix.is_uppercase() {
-                errors.push(Error::InvalidRegisterBankName(decl.name.clone()));
+                errors.push(Error::InvalidRegisterBankName(decl.name.clone(), decl.name_span));
                 continue;
             }
             let mut signals = Vec::new();

@@ -725,6 +725,7 @@ pub struct RegisterDecl {
 pub struct RegisterBankDecl {
     pub span: Span,
     pub name: String,
+    pub name_span: Span,
     pub registers: Vec<RegisterDecl>,
 }
 

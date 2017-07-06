@@ -43,7 +43,7 @@ pub enum Error {
     WireLoop(Vec<String>),
     InvalidWireWidth(Span),
     // FIXME: location
-    InvalidRegisterBankName(String),
+    InvalidRegisterBankName(String, Span),
     InvalidBitIndex(SpannedExpr, u8),
     NonBooleanWidth(SpannedExpr),
     NoBitWidth(SpannedExpr),
@@ -215,11 +215,12 @@ impl Error {
                 error(output, &format!("Invalid wire width specified."))?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
-            Error::InvalidRegisterBankName(ref name) => {
+            Error::InvalidRegisterBankName(ref name, ref span) => {
                 error(output, &format!("Register bank name '{}' invalid.\nRegister bank names must be two characters.\n\
                                         The first character (input prefix) must be a lowercase letter.\n\
                                         The second character (output prefix) must be an uppercase lettter.",
                                         name))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             // FIXME: expression width
             Error::InvalidBitIndex(ref expr, index) => {
@@ -369,7 +370,7 @@ impl error::Error for Error {
             Error::PartialFixedInput(_) => "part of fixed functionality set, but not all",
             Error::WireLoop(_) => "circular dependency between wires found",
             Error::InvalidWireWidth(_) => "wire width out of range",
-            Error::InvalidRegisterBankName(_) => "invalid register bank name",
+            Error::InvalidRegisterBankName(_,_) => "invalid register bank name",
             Error::InvalidBitIndex(_, _) => "invalid bit index for bit-slicing",
             Error::InvalidConstant(_) => "constant is too big or small",
             Error::WireTooWide(_) => "wire would be wider than 128 bits",
