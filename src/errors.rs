@@ -13,14 +13,10 @@ use io::FileContents;
 
 #[derive(Debug)]
 pub enum Error {
-    // FIXME: add widths
     MismatchedMuxWidths(Vec<MuxOption>, Vec<WireWidth>),
-    // FIXME: add widths
     MismatchedExprWidths(SpannedExpr, WireWidth, SpannedExpr, WireWidth),
-    // FIXME: add widths
     MismatchedWireWidths(String, WireWidth, SpannedExpr, WireWidth),
     // register bank, register name, expr
-    // FIXME: add widths
     MismatchedRegisterDefaultWidths {
         bank: String,
         register_name: String,
