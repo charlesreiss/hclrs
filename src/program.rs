@@ -1049,7 +1049,6 @@ impl RunningProgram {
                   }
                },
                &Action::ReadMemory { ref is_read, ref address, ref out_port, ref bytes, ref is_instruction } => {
-                   // FIXME: instruction decoding
                    let do_read = match is_read {
                        &None => true,
                        &Some(ref wire) => self.values.get(wire).unwrap().is_true(),

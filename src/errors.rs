@@ -30,11 +30,9 @@ pub enum Error {
         register_name: String,
     },
     RuntimeMismatchedWidths(),
-    // FIXME: should have span of assignment name, not assigned value
     UndefinedWireAssigned(String, Span),
     UndefinedWireRead(String, SpannedExpr),
     NonConstantWireRead(String, SpannedExpr),
-    // FIXME location of definition?
     UnsetWire(String, Span),
     UnsetBuiltinWire(String),
     RedeclaredWire(String, Span, Span),
@@ -42,7 +40,6 @@ pub enum Error {
     DoubleAssignedFixedOutWire(String, Span),
     RedeclaredBuiltinWire(String, Span),
     PartialFixedInput(String),
-    // FIXME: generate
     WireLoop(Vec<String>),
     InvalidWireWidth(Span),
     // FIXME: location
