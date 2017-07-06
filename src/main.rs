@@ -64,7 +64,7 @@ fn main_real() -> Result<(), Error> {
         if free_args.len() > 2 {
             match u32::from_str_radix(&free_args[2], 10) {
                 Ok(x) => x,
-                Err(x) => panic!("timeout {} is not a number", &free_args[2]),
+                Err(_) => panic!("timeout {} is not a number", &free_args[2]),
             }
         } else {
             9999

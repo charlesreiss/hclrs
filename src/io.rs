@@ -45,7 +45,7 @@ impl FileContents {
         file_reader.read_to_end(&mut file_bytes)?;
         match str::from_utf8(&file_bytes) {
             Ok(_) => {},
-            Err(bad_utf8) => {
+            Err(_) => {
                 warn!("input file {} is not valid UTF-8", filename);
             },
         };

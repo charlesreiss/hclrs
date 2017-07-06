@@ -10,8 +10,8 @@ use lalrpop_util::{ErrorRecovery, ParseError};
 
 use std::env;
 use std::fs::{File, read_dir};
-use std::io::{Read, BufReader, stderr};
-use std::path::{Path, PathBuf};
+use std::io::{Read, BufReader};
+use std::path::Path;
 use std::sync::{Once, ONCE_INIT};
 extern crate env_logger;
 
@@ -548,7 +548,7 @@ fn external_reference() {
 fn get_errors_for(code: &str) -> String {
     let file_contents = FileContents::new_from_data(Y86_PREAMBLE, code, "test.hcl");
     match parse_y86_hcl(&file_contents) {
-        Ok(program) => {
+        Ok(_) => {
             panic!("expected compilation failure");
         },
         Err(e) => {

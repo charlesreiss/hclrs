@@ -14,7 +14,6 @@ mod io;
 #[cfg(test)]
 mod tests;
 
-use std::io::Write;
 use std::path::Path;
 use lexer::Lexer;
 use parser::parse_Statements;

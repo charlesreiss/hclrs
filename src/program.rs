@@ -44,14 +44,6 @@ impl<T: PartialEq + Eq + Hash + Clone + Debug> Graph<T> {
         }
     }
 
-    fn in_edges(&self, to: &T) -> HashSet<T> {
-        if let Some(result) = self.edges_inverted.get(to) {
-            result.clone()
-        } else {
-            HashSet::new()
-        }
-    }
-
     fn out_edges(&self, to: &T) -> HashSet<T> {
         if let Some(result) = self.edges.get(to) {
             result.clone()

@@ -104,9 +104,6 @@ impl Error {
                 }
             },
             Error::MismatchedMuxWidths(ref options, ref widths) => {
-                let first_option = options.first().unwrap();
-                let last_option = options.last().unwrap();
-                let range = 
                 error(output, "Mismatched wire widths for mux options.")?;
                 let mut by_width = BTreeMap::new();
                 for i in 0..options.len() {
@@ -159,7 +156,7 @@ impl Error {
                     "Register '{}' in bank '{}' defined twice.", register_name, bank))?;
             },
             Error::RuntimeMismatchedWidths() => {
-                error(output, &format!("Unexpected wire width disagreement."));
+                error(output, &format!("Unexpected wire width disagreement."))?;
             },
             Error::UndefinedWireAssigned(ref name, ref expr) => {
                 // TODO: suggestions for wire meant?

@@ -658,7 +658,7 @@ impl SpannedExpr {
                 _ => {},
             }
             Ok(())
-        });
+        }).unwrap();
         result
     }
 
@@ -674,7 +674,7 @@ impl SpannedExpr {
                 _ => {},
             }
             Ok(())
-        });
+        }).unwrap();
         result
     }
 }
