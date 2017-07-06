@@ -300,6 +300,8 @@ impl<'input> Iterator for Lexer<'input> {
                                             self.internal_next();
                                             break;
                                         }
+                                    } else if self.peek_char() == None {
+                                        break
                                     }
                                 }
                                 if !found_end {
@@ -375,5 +377,15 @@ mod tests {
     fn eof_comment() {
         let mut lexer = Lexer::new("/* foo */");
         assert!(lexer.next().is_none());
+    }
+
+    #[test]
+    fn unterminated_comment() {
+        let mut lexer = Lexer::new("/* foo");
+        if let Some(Err(Error::UnterminatedComment(loc))) = lexer.next() {
+            assert_eq!(loc, 0);
+        } else {
+            assert!(false);
+        }
     }
 }
