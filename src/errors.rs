@@ -130,18 +130,18 @@ impl Error {
             },
             Error::MismatchedExprWidths(ref first, first_width, ref second, second_width) => {
                 error(output, &format!(
-                    "Mismatched wire widths.\nOne side is {} bits wide:\n", first_width.bits_or_128()));
-                write!(output, "{}", contents.show_region(first.span.0, first.span.1));
+                    "Mismatched wire widths.\nOne side is {} bits wide:\n", first_width.bits_or_128()))?;
+                write!(output, "{}", contents.show_region(first.span.0, first.span.1))?;
                 error_continue(output, &format!(
-                    "The other side is {} bits wide:\n", second_width.bits_or_128()));
-                write!(output, "{}", contents.show_region(second.span.0, second.span.1));
+                    "The other side is {} bits wide:\n", second_width.bits_or_128()))?;
+                write!(output, "{}", contents.show_region(second.span.0, second.span.1))?;
             },
             Error::MismatchedWireWidths(ref name, first_width, ref second, second_width) => {
                 error(output, &format!(
                     "Mismatched wire widths.\nThe wire '{}' is declared as {} bits wide.\n\
                      But a {} bit-wide value is assigned to it:\n", 
-                    name, first_width.bits_or_128(), second_width.bits_or_128()));
-                write!(output, "{}", contents.show_region(second.span.0, second.span.1));
+                    name, first_width.bits_or_128(), second_width.bits_or_128()))?;
+                write!(output, "{}", contents.show_region(second.span.0, second.span.1))?;
             },
             Error::MismatchedRegisterDefaultWidths {
                 ref bank, ref register_name, ref default_expression,
@@ -150,13 +150,13 @@ impl Error {
                 error(output, &format!(
                     "Register '{}' in bank '{}' is {} bits wide, but default expression is\
                      {} bits wide:\n",
-                     register_name, bank, register_width.bits_or_128(), expression_width.bits_or_128()));
-                write!(output, "{}", contents.show_region(default_expression.span.0, default_expression.span.1));
+                     register_name, bank, register_width.bits_or_128(), expression_width.bits_or_128()))?;
+                write!(output, "{}", contents.show_region(default_expression.span.0, default_expression.span.1))?;
                       
             },
             Error::DuplicateRegister { ref bank, ref register_name } => {
                 error(output, &format!(
-                    "Register '{}' in bank '{}' defined twice.", register_name, bank));
+                    "Register '{}' in bank '{}' defined twice.", register_name, bank))?;
             },
             Error::RuntimeMismatchedWidths() => {
                 error(output, &format!("Unexpected wire width disagreement."));
@@ -165,88 +165,88 @@ impl Error {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
                             "Undefined wire '{}' assigned value:",
-                            name));
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                            name))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::UndefinedWireRead(ref name, ref expr) => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
                             "Usage of undefined value '{}' in expression:",
-                            name));
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                            name))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::NonConstantWireRead(ref name, ref expr) => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
                             "Usage of non-constant wire '{}' in initial or constant value:",
-                            name));
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                            name))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::UnsetWire(ref name) => {
                 error(output, &format!(
                             "Wire '{}' (possibly built-in) defined but never assigned.",
-                            name));
+                            name))?;
             }
             // FIXME: add where this error happens
             Error::RedefinedWire(ref name) => {
-                error(output, &format!("Wire '{}' redefined.", name));
+                error(output, &format!("Wire '{}' redefined.", name))?;
             },
             // FIXME: add where this error happens
             Error::RedefinedBuiltinWire(ref name) => {
-                error(output, &format!("Builtin wire '{}' redefined.", name));
+                error(output, &format!("Builtin wire '{}' redefined.", name))?;
             },
             Error::PartialFixedInput(ref name) => {
                 // FIXME: error should identify missing input
-                error(output, &format!("Wire '{}' set, but not the rest of this piece of fixed functionality.", name));
+                error(output, &format!("Wire '{}' set, but not the rest of this piece of fixed functionality.", name))?;
             },
             Error::InvalidWireWidth(ref span) => {
-                error(output, &format!("Invalid wire width specified."));
-                write!(output, "{}", contents.show_region(span.0, span.1));
+                error(output, &format!("Invalid wire width specified."))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             Error::InvalidRegisterBankName(ref name) => {
                 error(output, &format!("Register bank name '{}' invalid.\nRegister bank names must be two characters.\n\
                                         The first character (input prefix) must be a lowercase letter.\n\
                                         The second character (output prefix) must be an uppercase lettter.",
-                                        name));
+                                        name))?;
             },
             // FIXME: expression width
             Error::InvalidBitIndex(ref expr, index) => {
-                error(output, &format!("Bit index '{}' out of range for expression:", index));
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                error(output, &format!("Bit index '{}' out of range for expression:", index))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::NonBooleanWidth(ref expr) => {
-                error(output, &format!("Non-boolean value used in with boolean operator:"));
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                error(output, &format!("Non-boolean value used in with boolean operator:"))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::NoBitWidth(ref expr) => {
-                error(output, &format!("Expression with unknown width used in bit concatenation:"));
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                error(output, &format!("Expression with unknown width used in bit concatenation:"))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::MisorderedBitIndexes(ref expr) => {
-                error(output, "Bit selection expression selects less than 0 bits:");
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                error(output, "Bit selection expression selects less than 0 bits:")?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::InvalidConstant(ref span) => {
-                error(output, "Constant value is out of range:");
-                write!(output, "{}", contents.show_region(span.0, span.1));
+                error(output, "Constant value is out of range:")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             Error::WireTooWide(ref expr) => {
-                error(output, "Expression would produce a value wider than supported (128 bits):");
-                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1));
+                error(output, "Expression would produce a value wider than supported (128 bits):")?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::UnterminatedComment(start) => {
-                error(output, "Unterminated comment starting here:");
-                write!(output, "{}", contents.show_region(start, start + 2));
+                error(output, "Unterminated comment starting here:")?;
+                write!(output, "{}", contents.show_region(start, start + 2))?;
             },
             Error::LexicalError(start) | Error::InvalidToken(start) => {
-                error(output, "Parse error here:");
-                write!(output, "{}", contents.show_region(start, start + 1));
+                error(output, "Parse error here:")?;
+                write!(output, "{}", contents.show_region(start, start + 1))?;
             },
             Error::EmptyFile() => {
-                error(output, &format!("Empty input file."));
+                error(output, &format!("Empty input file."))?;
             },
             Error::UnparseableLine(ref line) => {
-                error(output, &format!("Could not parse '{}' in .yo file.", line));
+                error(output, &format!("Could not parse '{}' in .yo file.", line))?;
             },
             Error::UnrecognizedToken { ref location, ref expected } => {
                 let token = &contents.data()[location.0..location.1];
@@ -267,27 +267,27 @@ impl Error {
                 expected_formatted.pop();
                 expected_formatted.pop();
                 error(output, &format!("Unrecognized token '{}', expected one of {}:",
-                    token, expected_formatted));
-                write!(output, "{}", contents.show_region(location.0, location.1));
+                    token, expected_formatted))?;
+                write!(output, "{}", contents.show_region(location.0, location.1))?;
                 // FIXME: note about missing ; if at beginning of line and ; is one of expected.
             },
             Error::ExtraToken(span) => {
                 let token = &contents.data()[span.0..span.1];
-                error(output, &format!("Unexpected token '{}':", token));
-                write!(output, "{}", contents.show_region(span.0, span.1));
+                error(output, &format!("Unexpected token '{}':", token))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             Error::WireLoop(ref lst) => {
-                error(output, &format!("Circular dependency detected:"));
+                error(output, &format!("Circular dependency detected:"))?;
                 for i in 0..lst.len() {
                     // FIXME: show code snippets of dependency?
                     error_continue(output, &format!("  '{}' depends on '{}'{}",
                         &lst[i], &lst[(i+1)%lst.len()],
                         if i == lst.len() - 1 { "" } else { " and" }
-                        ));
+                        ))?;
                 }
             },
             _ => {
-                error(output, &format!("{:?}", *self));
+                error(output, &format!("{:?}", *self))?;
             }
         }
         Ok(())
