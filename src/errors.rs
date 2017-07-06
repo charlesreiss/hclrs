@@ -87,6 +87,14 @@ fn error_continue<W: Write>(output: &mut W, message: &str) -> Result<(), io::Err
     Ok(())
 }
 
+fn s_are(i: usize) -> &'static str {
+    if i != 1 {
+        "s are"
+    } else {
+        " is"
+    }
+}
+
 impl Error {
     pub fn format_for_contents<W: Write>(&self, output: &mut W, contents: &FileContents) -> Result<(), io::Error> {
         match *self {
@@ -112,8 +120,8 @@ impl Error {
                 }
                 for (width, lst) in by_width {
                     error_continue(output,
-                                   &format!("{} options are {} bits wide:\n",
-                                            lst.len(), width.bits_or_128()))?;
+                                   &format!("{} option{} {} bits wide:\n",
+                                            lst.len(), s_are(lst.len()), width.bits_or_128()))?;
                     for item in lst {
                         write!(output, "{}",
                                contents.show_region(item.value.span.0, item.value.span.1))?;

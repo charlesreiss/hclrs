@@ -73,7 +73,7 @@ impl FileContents {
         };
         let next_line_loc = if index == self.newlines.len() - 1 { self.data.len() } else { self.newlines[index + 1].0 };
         let cur_line = self.newlines[index];
-        (cur_line.1, cur_line.0, next_line_loc)
+        (cur_line.1, cur_line.0 + 1, next_line_loc)
     }
 
     pub fn line(&self, index: usize) -> usize {
@@ -113,6 +113,7 @@ impl FileContents {
         result.push_str(&format!("     -> {}:{}\n", filename, begin_line_no));
         result.push_str(         "     |\n");
         let mut number = begin_line_no;
+        debug!("segment : {:?}", segment);
         for line in segment.lines() {
             let this_start = if number == begin_line_no { begin_line_offset } else { 0 };
             let this_end = if number == end_line_no { end_line_offset } else { line.len() };

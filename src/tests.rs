@@ -1,5 +1,5 @@
 use ast::{Statement, SpannedExpr, Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
-use program::{Program, RunningProgram};
+use program::{Program, RunningProgram, Y86_PREAMBLE};
 use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
 use lexer::{Lexer, Tok};
 use errors::Error;
@@ -543,4 +543,41 @@ fn external_reference() {
     let mut dir = Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).parent().unwrap().to_owned();
     dir.push("hclrs-studentref");
     check_reference_dir(&dir);
+}
+
+fn get_errors_for(code: &str) -> String {
+    let file_contents = FileContents::new_from_data(Y86_PREAMBLE, code, "test.hcl");
+    match parse_y86_hcl(&file_contents) {
+        Ok(program) => {
+            panic!("expected compilation failure");
+        },
+        Err(e) => {
+            let mut output: Vec<u8> = Vec::new();
+            e.format_for_contents(&mut output, &file_contents).unwrap();
+            return String::from_utf8(output).unwrap();
+        }
+    }
+}
+
+#[test]
+fn error_mux_widths() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 10, bar: 11, quux: 10;
+foo = 0;
+bar = 1;
+quux = [
+    foo > 3 : foo;
+    foo < 3 : bar;
+    1 : 0;
+];
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Mismatched wire widths for mux options"));
+    assert!(message.contains("1 option is 10 bits wide"));
+    assert!(message.contains("1 option is 11 bits wide"));
+    assert!(message.contains("foo > 3 : foo;"));
+    assert!(message.contains("foo < 3 : bar;"));
 }
