@@ -5,6 +5,9 @@ authors = ["Charles Reiss <cr4bd@virginia.edu>"]
 
 build = "build.rs" # LARLRPOP preprocessing
 
+[profile.release]
+lto = true
+
 # For tokenization
 [dependencies.regex]
 version = "0.2.1"
