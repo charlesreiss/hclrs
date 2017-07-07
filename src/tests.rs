@@ -581,3 +581,118 @@ pc = 0;
     assert!(message.contains("foo > 3 : foo;"));
     assert!(message.contains("foo < 3 : bar;"));
 }
+
+#[test]
+fn error_expr_widths() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 10, bar: 11, quux: 10;
+foo = 0;
+bar = 1;
+quux = foo
+            &
+       bar;
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Mismatched wire widths."));
+    assert!(message.contains("is 10 bits wide"));
+    assert!(message.contains("is 11 bits wide"));
+    assert!(message.contains("quux = foo"));
+    assert!(message.contains("bar;"));
+}
+
+#[test]
+fn error_wire_widths() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 10, bar: 11;
+foo = 0;
+bar = foo;
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Mismatched wire widths."));
+    assert!(message.contains("The wire 'bar' is declared as 11 bits wide."));
+    assert!(message.contains("a 10 bit wide value is assigned to it"));
+    assert!(message.contains("foo;"));
+}
+
+#[test]
+fn error_register_init_widths() {
+    init_logger();
+    let message = get_errors_for("
+register xF {
+    foo : 14 = 0b100;
+};
+
+x_foo = 1;
+
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Register 'foo' in bank 'xF' is 14 bits wide, but "));
+    assert!(message.contains("3 bits wide:"));
+    assert!(message.contains("= 0b100"));
+}
+
+#[test]
+fn error_duplicate_register() {
+    init_logger();
+    let message = get_errors_for("
+register xF {
+    foo : 14 = 0;
+    foo : 14 = 0;
+};
+
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Register 'foo' in bank 'xF' defined twice."));
+}
+
+#[test]
+fn error_undefined_wire_assign() {
+    init_logger();
+    let message = get_errors_for("
+foo = 42;
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Undefined wire 'foo' assigned value:"));
+    assert!(message.contains("foo = 42;"));
+}
+
+#[test]
+fn error_undefined_wire_read() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 16;
+foo = bar + 42;
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Usage of undefined value 'bar' in expression:"));
+    assert!(message.contains("bar + 42"));
+}
+
+#[test]
+fn error_nonconstant_wire_read_constant() {
+    init_logger();
+    let message = get_errors_for("
+wire quux : 16;
+const FOO = quux + 42;
+quux = 42;
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Usage of non-constant wire 'quux' in initial or constant value:"));
+    assert!(message.contains("quux + 42"));
+}

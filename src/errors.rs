@@ -131,7 +131,7 @@ impl Error {
             Error::MismatchedWireWidths(ref name, first_width, ref second, second_width) => {
                 error(output, &format!(
                     "Mismatched wire widths.\nThe wire '{}' is declared as {} bits wide.\n\
-                     But a {} bit-wide value is assigned to it:\n", 
+                     But a {} bit wide value is assigned to it:\n",
                     name, first_width.bits_or_128(), second_width.bits_or_128()))?;
                 write!(output, "{}", contents.show_region(second.span.0, second.span.1))?;
             },
@@ -140,12 +140,12 @@ impl Error {
                 ref register_width, ref expression_width
             } => {
                 error(output, &format!(
-                    "Register '{}' in bank '{}' is {} bits wide, but default expression is\
+                    "Register '{}' in bank '{}' is {} bits wide, but default value is\
                      {} bits wide:\n",
                      register_name, bank, register_width.bits_or_128(), expression_width.bits_or_128()))?;
                 write!(output, "{}", contents.show_region(default_expression.span.0, default_expression.span.1))?;
-                      
             },
+            // FIXME: show line numbers
             Error::DuplicateRegister { ref bank, ref register_name } => {
                 error(output, &format!(
                     "Register '{}' in bank '{}' defined twice.", register_name, bank))?;

@@ -430,7 +430,7 @@ fn assignments_to_actions<'a>(
                             assert!(covered.contains(&in_name));
                         }
                         if let Some(the_width) = widths.get(name) {
-                            expr.width(widths)?.combine_expr_and_wire(*the_width, name, expr)?;
+                            the_width.combine_expr_and_wire(expr.width(widths)?, name, expr)?;
                             result.push(Action::Assign(
                                 String::from(name),
                                 (*expr).clone(),
