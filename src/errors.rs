@@ -302,11 +302,11 @@ impl Error {
                 // heuristic check for missing semicolon at EOL
                 if expected.iter().find(|x| *x == "\";\"").is_some() {
                     debug!("has semicolon");
-                    let (number, start, next) = contents.line_number_and_bounds(location.0);
+                    let (_, start, _) = contents.line_number_and_bounds(location.0);
                     let before: &str = &contents.data()[start..location.0];
                     debug!("prefix is {:?}", before);
                     if before.find(|x: char| !x.is_whitespace()).is_none() {
-                        error_continue(output, "(Missing semicolon before this?)");
+                        error_continue(output, "(Missing semicolon before this?)")?;
                     }
                 }
                 write!(output, "{}", contents.show_region(location.0, location.1))?;
