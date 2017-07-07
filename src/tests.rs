@@ -976,3 +976,23 @@ Stat = STAT_AOK;
     assert!(message.contains("Unexpected token 'bar', expected one of"));
     assert!(message.contains("Missing semicolon"));
 }
+
+#[test]
+fn error_recovery() {
+    init_logger();
+    let message = get_errors_for("
+register xF {
+    foo : 10 = 0
+    bar : 10 = 1
+}
+register yZ {
+    quux : 10 = 0
+    baz : 10 = 1
+}
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token 'bar', expected one of"));
+    assert!(message.contains("Unexpected token 'baz', expected one of"));
+}

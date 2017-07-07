@@ -389,6 +389,7 @@ pub enum Expr {
     BitSelect { from: SpannedExpr, low: u8, high: u8 },
     Concat(SpannedExpr, SpannedExpr),
     InSet(SpannedExpr, Vec<SpannedExpr>),
+    Error,
 }
 
 pub type WireValues = HashMap<String, WireValue>;
@@ -499,6 +500,8 @@ impl SpannedExpr {
                     Ok(WireWidth::Bits(1))
                 }
             },
+            /* panic since we should report error at parse-time instead */
+            Expr::Error => panic!("expression did not parse correctly"),
         }
     }
 
@@ -562,6 +565,8 @@ impl SpannedExpr {
                 }
                 Ok(WireValue::false_value())
             }
+            /* panic since we should report error at parse-time instead */
+            Expr::Error => panic!("expression did not parse correctly"),
         }
     }
 
@@ -596,7 +601,8 @@ impl SpannedExpr {
                 for ref item in lst {
                     item.apply_to_all(func)?;
                 }
-            }
+            },
+            Expr::Error => {},
         }
         Ok(())
     }
@@ -644,7 +650,8 @@ impl SpannedExpr {
                         item.apply_to_all_mut(func)?;
                     }
                 }
-            }
+            },
+            Expr::Error => {},
         }
         Ok(())
     }
@@ -735,4 +742,5 @@ pub enum Statement {
     WireDecls(Vec<WireDecl>),
     Assignments(Vec<Assignment>),
     RegisterBankDecl(RegisterBankDecl),
+    Error,
 }

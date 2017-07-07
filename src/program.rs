@@ -608,6 +608,10 @@ impl Program {
                 Statement::RegisterBankDecl(ref decl) => {
                     register_banks_raw.push(decl);
                 },
+                Statement::Error => {
+                    /* panic since we should report this and give up earlier */
+                    panic!("statement did not parse correctly");
+                },
             }
         }
 
