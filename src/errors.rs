@@ -289,19 +289,26 @@ impl Error {
                     match possible_token.as_str() {
                         "ID" => expected_formatted.push_str("<an identifier>"),
                         "CONSTANT" => expected_formatted.push_str("<an integer constant>"),
-                        "'" => expected_formatted.push_str("\"'\""),
                         _ => {
-                            expected_formatted.push('\'');
                             expected_formatted.push_str(possible_token);
-                            expected_formatted.push('\'');
                         }
                     }
                     expected_formatted.push_str(", ");
                 }
                 expected_formatted.pop();
                 expected_formatted.pop();
-                error(output, &format!("Unrecognized token '{}', expected one of {}:",
+                error(output, &format!("Unexpected token '{}', expected one of {}:",
                     token, expected_formatted))?;
+                // heuristic check for missing semicolon at EOL
+                if expected.iter().find(|x| *x == "\";\"").is_some() {
+                    debug!("has semicolon");
+                    let (number, start, next) = contents.line_number_and_bounds(location.0);
+                    let before: &str = &contents.data()[start..location.0];
+                    debug!("prefix is {:?}", before);
+                    if before.find(|x: char| !x.is_whitespace()).is_none() {
+                        error_continue(output, "(Missing semicolon before this?)");
+                    }
+                }
                 write!(output, "{}", contents.show_region(location.0, location.1))?;
                 // FIXME: note about missing ; if at beginning of line and ; is one of expected.
             },

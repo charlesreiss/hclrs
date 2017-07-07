@@ -948,3 +948,31 @@ which has more lines
     assert!(message.contains("Unterminated comment starting here:"));
     assert!(message.contains("This is the start of the comment"));
 }
+
+#[test]
+fn error_missing_semicolon_statement() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token 'Stat', expected one of"));
+    assert!(message.contains("Missing semicolon"));
+}
+
+#[test]
+fn error_missing_semicolon_register() {
+    init_logger();
+    let message = get_errors_for("
+register xF {
+    foo : 10 = 0
+    bar : 10 = 1
+}
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token 'bar', expected one of"));
+    assert!(message.contains("Missing semicolon"));
+}
