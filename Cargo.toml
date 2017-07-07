@@ -5,6 +5,10 @@ authors = ["Charles Reiss <cr4bd@virginia.edu>"]
 
 build = "build.rs" # LARLRPOP preprocessing
 
+[features]
+default = ["strict-wire-widths"]
+strict-wire-widths = []
+
 [profile.release]
 lto = true
 

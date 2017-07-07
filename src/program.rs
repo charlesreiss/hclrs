@@ -407,10 +407,22 @@ fn assignments_to_actions<'a>(
         }
 
         if bad_inputs.len() > 0 {
-            // FIXME: identify what inputs could be added for error message
-            let bad_list = bad_inputs.iter().map(
-                |x| Error::PartialFixedInput(String::from(*x))).collect();
-            return Err(Error::MultipleErrors(bad_list));
+            let mut errors = Vec::new();
+            for bad_input in bad_inputs {
+                let mut matching_fixed: Vec<Vec<String>> = Vec::new();
+                for fixed in fixed_functions.iter() {
+                    if fixed.in_wires.iter().find(|x| x.name == bad_input).is_some() {
+                        matching_fixed.push(
+                            fixed.in_wires.iter().map(|x| x.name.clone()).collect()
+                        )
+                    }
+                }
+                errors.push(Error::PartialFixedInput {
+                    found_input: String::from(bad_input),
+                    all_inputs: matching_fixed,
+                });
+            }
+            return Err(Error::MultipleErrors(errors));
         }
     }
 

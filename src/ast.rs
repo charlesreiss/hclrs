@@ -20,7 +20,7 @@ use errors::Error;
 // if true:
 // *  require equality for non-bitwise binary ops; (otherwise, take maximum)
 // *  require boolean arguments for &&, ||, etc.
-const STRICT_WIRE_WIDTHS: bool = false;
+const STRICT_WIRE_WIDTHS: bool = cfg!(feature="strict-wire-widths");
 
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq,PartialOrd,Ord)]

@@ -408,6 +408,10 @@ fn eval_bitselect() {
         parse_Expr_str(&mut errors, "0b10001011[7..8]").unwrap().evaluate_constant().unwrap(),
         WireValue::from_binary("1")
     );
+    assert_eq!(
+        parse_Expr_str(&mut errors, "(0b1000 .. 0b1011)[7..8]").unwrap().evaluate_constant().unwrap(),
+        WireValue::from_binary("1")
+    );
     assert_eq!(errors.len(), 0);
 }
 
@@ -790,4 +794,157 @@ Stat = STAT_AOK;
     debug!("error message is {}", message);
     assert!(message.contains("Builtin wire 'i10bytes' redeclared here:"));
     assert!(message.contains("wire i10bytes : 64"));
+}
+
+#[test]
+fn error_partial_fixed() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+Stat = STAT_AOK;
+mem_addr = 0x42;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'mem_addr' set, but not the rest of this piece of fixed functionality."));
+    assert!(message.contains("Did you mean to set mem_readbit?"));
+    assert!(message.contains("Did you mean to set mem_input and mem_writebit?"));
+}
+
+#[test]
+fn error_wire_loop() {
+    init_logger();
+    let message = get_errors_for("
+wire quux : 64;
+quux = i10bytes[0..64];
+pc = quux + 42;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Circular dependency detected:"));
+    assert!(message.contains("'i10bytes' depends on 'pc'"));
+    assert!(message.contains("'pc' depends on 'quux'"));
+    assert!(message.contains("'quux' depends on 'i10bytes'"));
+}
+
+#[test]
+fn error_invalid_wire_width() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+Stat = STAT_AOK;
+wire foo : 129;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Invalid wire width specified."));
+}
+
+#[test]
+fn error_register_bank_name() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+Stat = STAT_AOK;
+register badName {
+    foo : 64 = 0;
+}
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Register bank name 'badName' invalid."));
+}
+
+#[test]
+fn error_invalid_bit_index() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 2;
+foo = (i10bytes + 42)[79..81];
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Bit index '81' out of range for expression:"));
+    assert!(message.contains("(i10bytes + 42)[79..81]"));
+}
+
+#[test]
+#[cfg(feature="strict-wire-widths")]
+fn error_non_boolean_width() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 1;
+foo = (pc == 42) || (pc + 42);
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Non-boolean value used with boolean operator:"));
+    assert!(message.contains("pc + 42"));
+}
+
+#[test]
+fn error_non_bit_width() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 88;
+foo = (42 .. pc);
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Expression with unknown width used in bit concatenation:"));
+    assert!(message.contains("42 .. pc"));
+}
+
+#[test]
+fn error_misordered_indexes() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 4;
+foo = i10bytes[9..3];
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Bit selection expression selects less than 0 bits:"));
+    assert!(message.contains("i10bytes[9..3]"));
+}
+
+#[test]
+fn error_invalid_constant() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0x1234567890ABCDEF01234567890ABCDEFA;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Constant value is out of range:"));
+    assert!(message.contains("0x123456789"));
+}
+
+#[test]
+fn error_wire_too_wide() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 64;
+foo = (i10bytes .. i10bytes)[32..96];
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Expression would produce a value wider than supported (128 bits):"));
+    assert!(message.contains("i10bytes .. i10bytes"));
+}
+
+#[test]
+fn error_unterminated_comment() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 64;
+/* This is the start of the comment
+
+which has more lines
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unterminated comment starting here:"));
+    assert!(message.contains("This is the start of the comment"));
 }

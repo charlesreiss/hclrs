@@ -201,6 +201,7 @@ SimpleTerm : SpannedExpr = {
     "(" <e:Expr> ")" => e,
     <start:@R> "[" <e:MuxOptions> "]" <end:@L> => SpannedExpr::new((start,end), Expr::Mux(e)),
     <start:@R> <i:ID> <end:@L> => SpannedExpr::new((start,end), Expr::NamedWire(String::from(i))),
+    <start:@R> "(" <l:Expr> ".." <r:Expr> ")" <end:@L> => SpannedExpr::new((start,end), Expr::Concat(l, r)),
 };
 
 Term : SpannedExpr = {
@@ -208,7 +209,6 @@ Term : SpannedExpr = {
     <start:@R> <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> "]" <end:@L> => {
         SpannedExpr::new((start,end), Expr::BitSelect { from: e, low: low, high: high })
     },
-    <start:@R> "(" <l:Term> ".." <r:Term> ")" <end:@L> => SpannedExpr::new((start,end), Expr::Concat(l, r)),
     <e:SimpleTerm> => e,
 };
 

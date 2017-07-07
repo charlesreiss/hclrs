@@ -39,7 +39,10 @@ pub enum Error {
     DoubleAssignedWire(String, Span, Span),
     DoubleAssignedFixedOutWire(String, Span),
     RedeclaredBuiltinWire(String, Span),
-    PartialFixedInput(String),
+    PartialFixedInput {
+        found_input: String,
+        all_inputs: Vec<Vec<String>>,
+    },
     WireLoop(Vec<String>),
     InvalidWireWidth(Span),
     // FIXME: location
@@ -206,9 +209,28 @@ impl Error {
                 error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
             },
-            Error::PartialFixedInput(ref name) => {
+            Error::PartialFixedInput { ref found_input, ref all_inputs } => {
                 // FIXME: error should identify missing input
-                error(output, &format!("Wire '{}' set, but not the rest of this piece of fixed functionality.", name))?;
+                error(output, &format!("Wire '{}' set, but not the rest of this piece of fixed functionality.", found_input))?;
+                for input_set in all_inputs.into_iter() {
+                    let mut filtered_set: Vec<String> = input_set.into_iter().filter(|x| *x != found_input).cloned().collect();
+                    filtered_set.sort();
+                    let mut lst = String::from("");
+                    if filtered_set.len() > 2 {
+                        lst = filtered_set[0..filtered_set.len() - 1].join(", ");
+                        lst.push_str(", and ");
+                        lst.push_str(&filtered_set[filtered_set.len() - 1]);
+                    } else if filtered_set.len() == 2 {
+                        lst.push_str(&filtered_set[0]);
+                        lst.push_str(" and ");
+                        lst.push_str(&filtered_set[1]);
+                    } else if filtered_set.len() == 1 {
+                        lst.push_str(&filtered_set[0])
+                    } else {
+                        continue;
+                    }
+                    error_continue(output, &format!("(Did you mean to set {}?)", lst))?;
+                }
             },
             Error::InvalidWireWidth(ref span) => {
                 error(output, &format!("Invalid wire width specified."))?;
@@ -227,7 +249,7 @@ impl Error {
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::NonBooleanWidth(ref expr) => {
-                error(output, &format!("Non-boolean value used in with boolean operator:"))?;
+                error(output, &format!("Non-boolean value used with boolean operator:"))?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::NoBitWidth(ref expr) => {
@@ -293,7 +315,7 @@ impl Error {
                 for i in 0..lst.len() {
                     // FIXME: show code snippets of dependency?
                     error_continue(output, &format!("  '{}' depends on '{}'{}",
-                        &lst[i], &lst[(i+1)%lst.len()],
+                        &lst[(i+1)%lst.len()], &lst[i],
                         if i == lst.len() - 1 { "" } else { " and" }
                         ))?;
                 }
@@ -366,7 +388,7 @@ impl error::Error for Error {
             Error::DoubleAssignedFixedOutWire(_,_) => "wire assigned by fixed functionality also assigned manually",
             Error::RedeclaredWire(_,_,_) => "multiply defined wire found",
             Error::RedeclaredBuiltinWire(_,_) => "redefined wire from fixed functionality",
-            Error::PartialFixedInput(_) => "part of fixed functionality set, but not all",
+            Error::PartialFixedInput {..} => "part of fixed functionality set, but not all",
             Error::WireLoop(_) => "circular dependency between wires found",
             Error::InvalidWireWidth(_) => "wire width out of range",
             Error::InvalidRegisterBankName(_,_) => "invalid register bank name",
