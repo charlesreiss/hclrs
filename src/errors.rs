@@ -189,7 +189,7 @@ impl Error {
             Error::RedeclaredWire(ref name, ref new_span, ref old_span) => {
                 error(output, &format!("Wire '{}' redeclared. Declared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
-                error_continue(output, "After being declarted here here:")?;
+                error_continue(output, "After being declared here here:")?;
                 write!(output, "{}", contents.show_region(old_span.0, old_span.1))?;
             },
             Error::DoubleAssignedWire(ref name, ref new_span, ref old_span) => {
@@ -202,7 +202,6 @@ impl Error {
                 error(output, &format!("Wire '{}' is output for fixed functionality but is assigned here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
             },
-            // FIXME: add where this error happens
             Error::RedeclaredBuiltinWire(ref name, ref new_span) => {
                 error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;

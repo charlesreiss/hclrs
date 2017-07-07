@@ -696,3 +696,98 @@ pc = 0;
     assert!(message.contains("Usage of non-constant wire 'quux' in initial or constant value:"));
     assert!(message.contains("quux + 42"));
 }
+
+#[test]
+fn error_unset_wire() {
+    init_logger();
+    let message = get_errors_for("
+wire quux : 16;
+Stat = STAT_AOK;
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'quux' never assigned but defined here:"));
+    assert!(message.contains("quux : 16"));
+}
+
+#[test]
+fn error_unset_builtin_wire_mandatory() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'Stat' required by fixed functionality but never assigned."));
+}
+
+#[test]
+fn error_unset_builtin_wire_inferred() {
+    init_logger();
+    let message = get_errors_for("
+wire dummy : 64;
+pc = 0;
+Stat = STAT_AOK;
+mem_readbit = 1;
+dummy = mem_output;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'mem_addr' required by fixed functionality but never assigned."));
+}
+
+#[test]
+fn error_redeclared_wire() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 64;
+wire foo : 32;
+foo = 0;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'foo' redeclared."));
+    assert!(message.contains("foo : 64"));
+    assert!(message.contains("foo : 32"));
+}
+
+#[test]
+fn error_double_assigned_wire() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 64;
+foo = 0;
+foo = 1;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'foo' assigned twice. Assigned here:"));
+    assert!(message.contains("foo = 0"));
+    assert!(message.contains("foo = 1"));
+}
+
+#[test]
+fn error_double_assigned_fixed_wire() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+i10bytes = 42;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'i10bytes' is output for fixed functionality but is assigned here:"));
+    assert!(message.contains("i10bytes = 42"));
+}
+
+#[test]
+fn error_redeclared_builtin_wire() {
+    init_logger();
+    let message = get_errors_for("
+wire i10bytes : 64;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Builtin wire 'i10bytes' redeclared here:"));
+    assert!(message.contains("wire i10bytes : 64"));
+}
