@@ -18,9 +18,10 @@ use lexer::Span;
 use errors::Error;
 
 // if true:
-// *  require equality for non-bitwise binary ops; (otherwise, take maximum)
+// *  require equality for non-bitwise, non-comparison binary ops; (otherwise, take maximum)
+const STRICT_WIDTHS_BINARY: bool = cfg!(feature="strict-wire-widths-binary");
 // *  require boolean arguments for &&, ||, etc.
-const STRICT_WIRE_WIDTHS: bool = cfg!(feature="strict-wire-widths");
+const STRICT_WIDTHS_BOOLEAN: bool = cfg!(feature="strict-boolean-ops");
 
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq,PartialOrd,Ord)]
@@ -310,7 +311,7 @@ impl BinOpCode {
                     None => return Err(Error::RuntimeMismatchedWidths()),
                 },
             BinOpKind::EqualWidthWeak =>
-                if STRICT_WIRE_WIDTHS {
+                if STRICT_WIDTHS_BINARY {
                     match left.width.combine(right.width) {
                         Some(width) => width,
                         None => return Err(Error::RuntimeMismatchedWidths()),
@@ -402,14 +403,14 @@ impl SpannedExpr {
                 match opcode.kind() {
                     BinOpKind::EqualWidth => left.width(widths)?.combine_exprs(right.width(widths)?, left, right),
                     BinOpKind::EqualWidthWeak => {
-                        if STRICT_WIRE_WIDTHS {
+                        if STRICT_WIDTHS_BINARY {
                             left.width(widths)?.combine_exprs(right.width(widths)?, left, right)
                         } else {
                             Ok((left.width(widths)?).max(right.width(widths)?))
                         }
                     },
                     BinOpKind::BooleanCombine => {
-                        if STRICT_WIRE_WIDTHS {
+                        if STRICT_WIDTHS_BOOLEAN {
                             if !left.width(widths)?.possibly_boolean() {
                                 return Err(Error::NonBooleanWidth(left.clone()));
                             }

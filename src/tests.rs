@@ -867,7 +867,7 @@ Stat = STAT_AOK;
 }
 
 #[test]
-#[cfg(feature="strict-wire-widths")]
+#[cfg(feature="strict-boolean-ops")]
 fn error_non_boolean_width() {
     init_logger();
     let message = get_errors_for("
