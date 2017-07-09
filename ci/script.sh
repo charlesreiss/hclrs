@@ -4,6 +4,7 @@ set -ex
 
 # TODO This is the "test phase", tweak it as you see fit
 main() {
+    rustup target add $TARGET
     cargo build --target $TARGET
     cargo build --target $TARGET --release
 
