@@ -6,14 +6,14 @@ set -ex
 main() {
     rustup target add $TARGET || true
     # cargo build --target $TARGET
-    cargo build --target $TARGET --release
+    cargo build --target $TARGET --release --verbose
 
     if [ ! -z $DISABLE_TESTS ]; then
         return
     fi
 
     # cargo test --target $TARGET
-    cargo test --target $TARGET --release
+    RUST_LOG=hclrs=debug cargo test --target $TARGET --release --verbose
 }
 
 # we don't run the "test phase" when doing deploys
