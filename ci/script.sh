@@ -4,19 +4,16 @@ set -ex
 
 # TODO This is the "test phase", tweak it as you see fit
 main() {
-    rustup target add $TARGET
-    cargo build --target $TARGET
+    rustup target add $TARGET || true
+    # cargo build --target $TARGET
     cargo build --target $TARGET --release
 
     if [ ! -z $DISABLE_TESTS ]; then
         return
     fi
 
-    cargo test --target $TARGET
+    # cargo test --target $TARGET
     cargo test --target $TARGET --release
-
-    cargo run --target $TARGET
-    cargo run --target $TARGET --release
 }
 
 # we don't run the "test phase" when doing deploys
