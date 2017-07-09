@@ -13,7 +13,7 @@ main() {
     fi
 
     # cargo test --target $TARGET
-    RUST_LOG=hclrs=debug cargo test --target $TARGET --release --verbose
+    RUST_TEST_THREADS=1 RUST_LOG=hclrs::tests=debug cargo test --target $TARGET --release --verbose -- error
 }
 
 # we don't run the "test phase" when doing deploys
