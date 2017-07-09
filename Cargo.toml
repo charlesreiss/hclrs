@@ -19,11 +19,11 @@ version = "0.2.1"
 
 # Parser runtime library
 [dependencies.lalrpop-util]
-version = "0.13.0"
+version = "0.13.1"
 
 # Parser library
 [build-dependencies.lalrpop]
-version = "0.13.0"
+version = "0.13.1"
 
 # For u128
 [dependencies.extprim]
