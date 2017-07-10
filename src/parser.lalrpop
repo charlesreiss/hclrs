@@ -1,3 +1,6 @@
+// We create some parse_* functions for testing only.
+#![allow(dead_code)]
+
 use extprim::u128::u128;
 use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue,
           BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement, SpannedExpr};
