@@ -7,6 +7,7 @@ main() {
     rustup target add $TARGET || true
     # cargo build --target $TARGET
     cargo build --target $TARGET --release --verbose
+    ulimit -a
 
     if [ ! -z $DISABLE_TESTS ]; then
         return
