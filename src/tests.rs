@@ -978,7 +978,7 @@ Stat = STAT_AOK;
 }
 
 #[test]
-fn error_recovery() {
+fn error_recovery_expr() {
     init_logger();
     let message = get_errors_for("
 register xF {
@@ -995,4 +995,41 @@ Stat = STAT_AOK;
     debug!("error message is {}", message);
     assert!(message.contains("Unexpected token 'bar', expected one of"));
     assert!(message.contains("Unexpected token 'baz', expected one of"));
+}
+
+#[test]
+fn error_recovery_register_decl() {
+    init_logger();
+    let message = get_errors_for("
+register xF {
+    foo : 10 = 0
+    bar : 10 = 1
+}
+register yZ {
+    >foo : 10 = 0;
+    quux : 10 = 0
+    baz : 10 = 1
+}
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token 'bar', expected one of"));
+    assert!(message.contains("Unexpected token 'baz', expected one of"));
+}
+
+#[test]
+fn error_recovery_statement() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 32, bar : 32;
+>foo = 0;
+foo = 42
+bar = foo;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token '>', expected one of"));
+    assert!(message.contains("Unexpected token 'bar', expected one of"));
 }

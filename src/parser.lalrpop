@@ -202,10 +202,10 @@ SimpleTerm : SpannedExpr = {
     <start:@R> "[" <e:MuxOptions> "]" <end:@L> => SpannedExpr::new((start,end), Expr::Mux(e)),
     <start:@R> <i:ID> <end:@L> => SpannedExpr::new((start,end), Expr::NamedWire(String::from(i))),
     <start:@R> "(" <l:Expr> ".." <r:Expr> ")" <end:@L> => SpannedExpr::new((start,end), Expr::Concat(l, r)),
-    //<start:@R> <e:!> <end:@L>  => {
-    //    errors.push(e);
-    //    SpannedExpr::new((start,end), Expr::Error)
-    //}
+    <start:@R> <e:!> <end:@L>  => {
+        errors.push(e);
+        SpannedExpr::new((start,end), Expr::Error)
+    }
 };
 
 Term : SpannedExpr = {
@@ -242,6 +242,11 @@ RegisterDecl : RegisterDecl = {
         RegisterDecl { name: String::from(n), width: w, default: e,
                        span: (start,end), }
     },
+    <start:@R> ! <end:@L> => {
+        RegisterDecl { name: String::from("<error>"), width: WireWidth::from(0),
+		       default: SpannedExpr::new((start,end), Expr::Error),
+                       span: (start,end), }
+    },
 };
 
 RegisterBankDecl : RegisterBankDecl = {
@@ -261,10 +266,10 @@ StatementNeedSemi : Statement = {
     Assignments => Statement::Assignments(<>),
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
-    // ! => {
-    //    errors.push(<>);
-    //    Statement::Error
-    // },
+    ! => {
+        errors.push(<>);
+        Statement::Error
+    },
 };
 
 StatementNoSemi : Statement = {
