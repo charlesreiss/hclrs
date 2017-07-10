@@ -21,7 +21,6 @@ matrix:
         apt:
           packages:
             - gcc-multlib
-
     - env: TARGET=i686-unknown-linux-musl
     - env: TARGET=x86_64-unknown-linux-gnu
     - env: TARGET=x86_64-unknown-linux-musl
@@ -61,7 +60,7 @@ deploy:
   provider: releases
   skip_cleanup: true
 
- cache: cargo
+cache: cargo
 before_cache:
   # Travis can't cache files that are not readable by "others"
   - chmod -R a+r $HOME/.cargo
