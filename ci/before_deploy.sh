@@ -17,10 +17,14 @@ main() {
 
     test -f Cargo.lock || cargo generate-lockfile
 
+    rustup target add $TARGET || true
+    # cargo build --target $TARGET
+    cargo build --target $TARGET --release --verbose
+
     cargo rustc --bin hclrs --target $TARGET --release -- -C lto
 
     # TODO Update this to package the right artifacts
-    cp target/$TARGET/release/hello $stage/
+    cp target/$TARGET/release/hclrs $stage/
 
     cd $stage
     tar czf $src/$CRATE_NAME-$TRAVIS_TAG-$TARGET.tar.gz *
