@@ -957,7 +957,7 @@ pc = 0
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Unexpected token 'Stat', expected one of"));
+    assert!(message.contains("Unexpected token 'Stat', expected"));
     assert!(message.contains("Missing semicolon"));
 }
 
@@ -973,7 +973,7 @@ pc = 0;
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Unexpected token 'bar', expected one of"));
+    assert!(message.contains("Unexpected token 'bar', expected"));
     assert!(message.contains("Missing semicolon"));
 }
 
@@ -993,8 +993,8 @@ pc = 0;
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Unexpected token 'bar', expected one of"));
-    assert!(message.contains("Unexpected token 'baz', expected one of"));
+    assert!(message.contains("Unexpected token 'bar', expected"));
+    assert!(message.contains("Unexpected token 'baz', expected"));
 }
 
 #[test]
@@ -1014,8 +1014,8 @@ pc = 0;
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Unexpected token 'bar', expected one of"));
-    assert!(message.contains("Unexpected token 'baz', expected one of"));
+    assert!(message.contains("Unexpected token 'bar', expected"));
+    assert!(message.contains("Unexpected token 'baz', expected"));
 }
 
 #[test]
@@ -1030,6 +1030,41 @@ pc = 0;
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Unexpected token '>', expected one of"));
-    assert!(message.contains("Unexpected token 'bar', expected one of"));
+    assert!(message.contains("Unexpected token '>', expected"));
+    assert!(message.contains("Unexpected token 'bar', expected"));
+}
+
+#[test]
+fn error_summarize_binary_operators() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 32, bar : 32;
+foo = (bar bar);
+bar = 42;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token 'bar', expected"));
+    assert!(message.contains("a binary operator"));
+    assert!(message.contains("\'..\'"));
+    assert!(message.contains("\'[\'"));
+}
+
+#[test]
+fn error_summarize_unary_operators() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 32, bar : 32;
+foo = (bar + );
+bar = 42;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token ')', expected"));
+    assert!(message.contains("a unary operator"));
+    assert!(message.contains("an identifier"));
+    assert!(message.contains("an integer constant"));
+    assert!(message.contains("\'[\'"));
 }

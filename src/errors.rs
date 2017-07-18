@@ -1,4 +1,5 @@
 use std::collections::btree_map::BTreeMap;
+use std::collections::HashSet;
 use std::convert::From;
 use std::error;
 use std::fmt;
@@ -91,6 +92,83 @@ fn s_are(i: usize) -> &'static str {
     } else {
         " is"
     }
+}
+
+fn format_token_list(tokens: &Vec<String>) -> String {
+    let all_bin_operators = vec!(
+        "!=", "&", "&&", "*", "+", "-", "/", "<", "<<", "<=", "==", ">", ">=", ">>",
+        "^", "|", "||", "in"
+    );
+    let all_un_operators = vec!(
+        "!", "-", "~"
+    );
+    // deliberately omitted:
+        // .. (wire concatenation, syntax requires parens)
+        // []
+        // ()
+    let mut token_set: HashSet<String> = HashSet::new();
+    for token in tokens {
+        token_set.insert(token.clone());
+    }
+    let mut num_bin_operators = 0;
+    for operator in &all_bin_operators {
+        let quoted_operator = format!("\"{}\"", operator);
+        if token_set.contains(&quoted_operator) {
+            num_bin_operators += 1;
+        }
+    }
+    let mut num_un_operators = 0;
+    for operator in &all_un_operators {
+        let quoted_operator = format!("\"{}\"", operator);
+        if token_set.contains(&quoted_operator) {
+            num_un_operators += 1;
+        }
+    }
+    let mut found_list = Vec::new();
+    if num_bin_operators == all_bin_operators.len() {
+        found_list.push(String::from("a binary operator"));
+        for operator in &all_bin_operators {
+            let quoted_operator = format!("\"{}\"", operator);
+            token_set.remove(&quoted_operator);
+        }
+    }
+    if num_un_operators == all_un_operators.len() {
+        found_list.push(String::from("a unary operator"));
+        for operator in &all_un_operators {
+            let quoted_operator = format!("\"{}\"", operator);
+            token_set.remove(&quoted_operator);
+        }
+    }
+    for possible_token in token_set {
+        match possible_token.as_str() {
+            "ID" => found_list.push(String::from("an identifier (wire name)")),
+            "CONSTANT" => found_list.push(String::from("an integer constant")),
+            _ => {
+                if &possible_token[0..1] == "\"" {
+                    // replace double with single quotes
+                    let new_token = format!("'{}'", &possible_token[1..(possible_token.len() - 1)]);
+                    found_list.push(new_token);
+                } else {
+                    found_list.push(String::from(possible_token));
+                }
+            }
+        }
+    }
+    found_list.sort();
+    let mut formatted_list = String::new();
+    if found_list.len() == 1 { 
+        formatted_list.push_str(&found_list[0]);
+    } else if found_list.len() == 2 {
+        formatted_list.push_str(&found_list[0]);
+        formatted_list.push_str(" or ");
+        formatted_list.push_str(&found_list[1]);
+    } else if let Some((format_last, format_rest)) = found_list.split_last() {
+        for item in format_rest {
+           formatted_list.push_str(&format!("{}, ", item));
+        }
+        formatted_list.push_str(&format!("or {}", format_last));
+    }
+    formatted_list
 }
 
 impl Error {
@@ -284,20 +362,8 @@ impl Error {
             },
             Error::UnrecognizedToken { ref location, ref expected } => {
                 let token = &contents.data()[location.0..location.1];
-                let mut expected_formatted = String::new();
-                for possible_token in expected {
-                    match possible_token.as_str() {
-                        "ID" => expected_formatted.push_str("<an identifier>"),
-                        "CONSTANT" => expected_formatted.push_str("<an integer constant>"),
-                        _ => {
-                            expected_formatted.push_str(possible_token);
-                        }
-                    }
-                    expected_formatted.push_str(", ");
-                }
-                expected_formatted.pop();
-                expected_formatted.pop();
-                error(output, &format!("Unexpected token '{}', expected one of {}:",
+                let expected_formatted = format_token_list(expected);
+                error(output, &format!("Unexpected token '{}', expected {}:",
                     token, expected_formatted))?;
                 // heuristic check for missing semicolon at EOL
                 if expected.iter().find(|x| *x == "\";\"").is_some() {
