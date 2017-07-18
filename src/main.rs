@@ -3,6 +3,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, Write, stdout, stderr, sink};
 use std::path::Path;
+use std::process;
 
 extern crate hclrs;
 extern crate getopts;
@@ -13,7 +14,12 @@ use getopts::Options;
 
 fn main() {
     env_logger::init().unwrap();
-    main_real().unwrap();
+    let okay = main_real().unwrap();
+    if okay {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
+    }
 }
 
 fn parse_y86(file_contents: &FileContents) -> Result<RunningProgram, Error> {
@@ -41,7 +47,7 @@ fn print_usage(program_name: &str, opts: Options) {
     print!("{}", opts.usage(&header));
 }
 
-fn main_real() -> Result<(), Error> {
+fn main_real() -> Result<bool, Error> {
     let args: Vec<String> = env::args().collect();
     let program_name = args[0].clone();
     let mut opts = Options::new();
@@ -56,7 +62,7 @@ fn main_real() -> Result<(), Error> {
     };
     if parsed_opts.opt_present("h") {
         print_usage(&program_name, opts);
-        return Ok(());
+        return Ok(true);
     }
     let mut step_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
     let mut disasm_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
@@ -66,29 +72,29 @@ fn main_real() -> Result<(), Error> {
     let free_args = parsed_opts.free;
     if free_args.len() < 1 {
         print_usage(&program_name, opts);
-        return Ok(());
+        return Ok(false);
     }
     let filename: &str = &free_args[0];
     let path = Path::new(filename);
     let file_contents = read_y86_hcl(path)?;
     if free_args.len() > 3 {
         print_usage(&program_name, opts);
-        return Ok(());
+        return Ok(false);
     }
     let running_program =
         match parse_y86(&file_contents) {
             Err(e) => {
                 e.format_for_contents(&mut stderr(), &file_contents)?;
-                return Ok(());
+                return Ok(false);
             },
             Ok(p) => p,
         };
     if check_only {
-        return Ok(());
+        return Ok(true);
     }
     if free_args.len() < 2 || free_args.len() > 3 {
         print_usage(&program_name, opts);
-        return Ok(());
+        return Ok(false);
     }
     let yo_filename: &str = &free_args[1];
     let timeout = 
@@ -97,7 +103,7 @@ fn main_real() -> Result<(), Error> {
                 Ok(x) => x,
                 Err(_) => {
                     print!("timeout {} is not a number", &free_args[2]);
-                    return Ok(());
+                    return Ok(false);
                 }
             }
         } else {
@@ -107,9 +113,12 @@ fn main_real() -> Result<(), Error> {
     let file_contents = read_y86_hcl(path)?;
     let yo_path = Path::new(yo_filename);
     match run_y86(running_program, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout) {
-        Err(e) => e.format_for_contents(&mut stderr(), &file_contents)?,
+        Err(e) => {
+            e.format_for_contents(&mut stderr(), &file_contents)?;
+            return Ok(false);
+        },
         _ => {},
     }
-    Ok(())
+    Ok(true)
 }
 
