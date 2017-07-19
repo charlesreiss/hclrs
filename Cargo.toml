@@ -1,6 +1,6 @@
 [package]
 name = "hclrs"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Charles Reiss <cr4bd@virginia.edu>"]
 
 build = "build.rs" # LARLRPOP preprocessing
