@@ -238,6 +238,7 @@ pub enum BinOpCode {
     LogicalOr,
     LeftShift,
     RightShift,
+    Error,
 }
 
 fn boolean_to_value(x: bool) -> u128 {
@@ -300,6 +301,7 @@ impl BinOpCode {
                 (_, true) => u128::new(0),
                 (x, false) => x,
             },
+            BinOpCode::Error => panic!("unreported parse error"),
         }
     }
 
@@ -308,7 +310,9 @@ impl BinOpCode {
             BinOpKind::EqualWidth =>
                 match left.width.combine(right.width) {
                     Some(width) => width,
-                    None => return Err(Error::RuntimeMismatchedWidths()),
+                    None => {
+                        return Err(Error::RuntimeMismatchedWidths());
+                    },
                 },
             BinOpKind::EqualWidthWeak =>
                 if STRICT_WIDTHS_BINARY {
@@ -401,7 +405,9 @@ impl SpannedExpr {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
                 match opcode.kind() {
-                    BinOpKind::EqualWidth => left.width(widths)?.combine_exprs(right.width(widths)?, left, right),
+                    BinOpKind::EqualWidth => {
+                        left.width(widths)?.combine_exprs(right.width(widths)?, left, right)
+                    },
                     BinOpKind::EqualWidthWeak => {
                         if STRICT_WIDTHS_BINARY {
                             left.width(widths)?.combine_exprs(right.width(widths)?, left, right)
@@ -432,6 +438,7 @@ impl SpannedExpr {
                 let mut maybe_width = Some(WireWidth::Unlimited);
                 let mut all_widths = Vec::new();
                 for option in options {
+                    option.condition.width(widths)?;
                     let option_width = option.value.width(widths)?;
                     all_widths.push(option_width);
                     if let Some(cur_width) = maybe_width {

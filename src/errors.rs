@@ -54,6 +54,7 @@ pub enum Error {
     MisorderedBitIndexes(SpannedExpr),
     InvalidConstant(Span),
     WireTooWide(SpannedExpr),
+    ExpectedStatementFoundExpr(SpannedExpr),
     UnterminatedComment(Loc),
     LexicalError(Loc),
     EmptyFile(),
@@ -393,6 +394,10 @@ impl Error {
                         ))?;
                 }
             },
+            Error::ExpectedStatementFoundExpr(ref expr) => {
+                error(output, &format!("Found expression, expected assignment or declaration:"))?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
+            },
             _ => {
                 error(output, &format!("{:?}", *self))?;
             }
@@ -472,6 +477,7 @@ impl error::Error for Error {
             Error::NonBooleanWidth(_) => "non-boolean operand to boolean operation",
             Error::MisorderedBitIndexes(_) => "misordered bit indexes in bitslice",
             Error::UnterminatedComment(_) => "unterminated /*-style comment",
+            Error::ExpectedStatementFoundExpr(_) => "statement expected; found expression",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",
@@ -494,7 +500,11 @@ impl error::Error for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)?;
+        match self {
+            &Error::IoError(ref e) => write!(f, "{}", e)?,
+            &Error::FmtError(ref e) => write!(f, "{}", e)?,
+            _ => write!(f, "{:?}", self)?,
+        }
         Ok(())
     }
 }

@@ -48,6 +48,19 @@ extern {
     }
 }
 
+pub Statements : Vec<Statement> = {
+    <v:StatementsNotEof> <e:StatementNeedSemi?> => {
+        match e {
+            None => v,
+            Some(e) => {
+                let mut v = v;
+                v.push(e);
+                v
+            }
+        }
+    }
+};
+
 Repeat<delim, T>: Vec<T> = {
     <v:(<T> delim)*> <e:T?> => match e {
         None => v,
@@ -97,6 +110,10 @@ SimpleConstant : u8 = {
 WireDecl : WireDecl = {
     <start:@R> <name:ID> ":" <width:WidthConstant> <end:@L>  =>
         WireDecl { name: String::from(name), width: width, span: (start, end), },
+    <error:!> => {
+        errors.push(error);
+        WireDecl { name: String::from("<error>"), width: WireWidth::Bits(0), span: (0, 0) }
+    },
 };
 
 // public for testing
@@ -105,7 +122,11 @@ pub WireDecls : Vec<WireDecl> = {
 };
 
 ConstDecl : ConstDecl = {
-    <name:IDWithSpan> "=" <e:Expr> => ConstDecl { name: String::from(name.0), name_span: name.1, value: e }
+    <name:IDWithSpan> "=" <e:Expr> => ConstDecl { name: String::from(name.0), name_span: name.1, value: e },
+    <error:!> => {
+        errors.push(error);
+        ConstDecl { name: String::from("<error>"), value: SpannedExpr::new((0,0), Expr::Error), name_span: (0, 0) }
+    },
 };
 
 // public for testing
@@ -133,6 +154,10 @@ BinOpOr : BinOpCode = {
 BinOpMulDiv : BinOpCode = {
     "*" => BinOpCode::Mul,
     "/" => BinOpCode::Div,
+    ! => {
+        errors.push(<>);
+        BinOpCode::Error
+    },
 };
 
 BinOpCompare : BinOpCode = {
@@ -203,12 +228,8 @@ SimpleTerm : SpannedExpr = {
     <start:@R> <c:CONSTANT> <end:@L> => SpannedExpr::new((start,end), Expr::Constant(c)),
     "(" <e:Expr> ")" => e,
     <start:@R> "[" <e:MuxOptions> "]" <end:@L> => SpannedExpr::new((start,end), Expr::Mux(e)),
-    <start:@R> <i:ID> <end:@L> => SpannedExpr::new((start,end), Expr::NamedWire(String::from(i))),
+    <i:IDWithSpan> => SpannedExpr::new(i.1, Expr::NamedWire(String::from(i.0))),
     <start:@R> "(" <l:Expr> ".." <r:Expr> ")" <end:@L> => SpannedExpr::new((start,end), Expr::Concat(l, r)),
-    <start:@R> <e:!> <end:@L>  => {
-        errors.push(e);
-        SpannedExpr::new((start,end), Expr::Error)
-    }
 };
 
 Term : SpannedExpr = {
@@ -228,6 +249,10 @@ IDWithSpan : (&'input str, Span) = {
     <start:@R> <n:ID> <end:@L> => {
         (n, (start,end))
     },
+    <start:@R> <error:!> <end:@L> => {
+        errors.push(error);
+        ("<error>", (start, end))
+    },
 };
 
 Assignment : Assignment = {
@@ -237,7 +262,7 @@ Assignment : Assignment = {
             names.push((String::from(name.0), name.1));
         }
         Assignment { span: (start,end), names: names, value: v }
-    }
+    },
 };
 
 RegisterDecl : RegisterDecl = {
@@ -269,10 +294,16 @@ StatementNeedSemi : Statement = {
     Assignments => Statement::Assignments(<>),
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
-    ! => {
-        errors.push(<>);
+    <e:Expr> => {
+        match *e.expr {
+            Expr::Error => {},
+            _ => errors.push(ErrorRecovery {
+                error: ParseError::User { error: Error::ExpectedStatementFoundExpr(e) },
+                dropped_tokens: vec!(),
+            }),
+        }
         Statement::Error
-    },
+    }
 };
 
 StatementNoSemi : Statement = {
@@ -313,17 +344,4 @@ StatementsNotEof : Vec<Statement> = {
         v.push(e);
         v
     },
-};
-
-pub Statements : Vec<Statement> = {
-    <v:StatementsNotEof> <e:StatementNeedSemi?> => {
-        match e {
-            None => v,
-            Some(e) => {
-                let mut v = v;
-                v.push(e);
-                v
-            }
-        }
-    }
 };
