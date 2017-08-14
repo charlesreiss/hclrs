@@ -1068,3 +1068,30 @@ Stat = STAT_AOK;
     assert!(message.contains("an integer constant"));
     assert!(message.contains("\'[\'"));
 }
+
+#[test]
+fn regression_symbol_type_mismatch() {
+    init_logger();
+    let mut errors = Vec::new();
+    parse_Statements_str(&mut errors,
+        "const CMOVXX = 0b0100;
+         e_dstE = [ 1: 0; ]
+         Stat = STAT_AOK;
+         ").unwrap();
+}
+
+#[test]
+fn regression_bogus_mux_width() {
+    init_logger();
+    let message = get_errors_for(
+        "register eM { icode:4=0; dstE:4 = REG_NONE; }
+         wire conditionsMet:1;
+         conditionsMet = 0;
+         e_icode  = CMOVXX;
+         e_dstE = [ e_icode == CMOVXX &! conditionsMet:  REG_NONE; ];
+         Stat = 0;
+         pc = 0;
+         ");
+    println!("{}", message);
+    assert!(message.contains("Mismatched wire widths"));
+}
