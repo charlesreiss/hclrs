@@ -17,7 +17,9 @@ mod tests;
 
 use std::path::Path;
 use lexer::Lexer;
+use lexer::LAST_LOC;
 use parser::parse_Statements;
+use std::panic::catch_unwind;
 
 pub use errors::Error;
 pub use program::{Program, RunningProgram};
@@ -28,6 +30,15 @@ pub fn read_y86_hcl(path: &Path) -> Result<FileContents, Error> {
 }
 
 pub fn parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
+    match catch_unwind(|| internal_parse_y86_hcl(contents)) {
+        Ok(x) => return x,
+        Err(panic_value) => {
+            let loc = LAST_LOC.with(|loc| { *loc.borrow() });
+            return Err(Error::InternalParserErrorNear((loc, loc + 1), format!("{:?}", panic_value)));
+        },
+    }
+}
+fn internal_parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
     let mut errors = Vec::new();
     let lexer = Lexer::new_for_file(contents);
     let statements;

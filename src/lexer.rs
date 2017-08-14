@@ -1,4 +1,5 @@
 use ast::{WireValue, WireWidth};
+use std::cell::RefCell;
 use std::str::CharIndices;
 use extprim::u128::u128;
 
@@ -9,6 +10,11 @@ pub type Spanned<T, E> = Result<(usize, T, usize), E>;
 
 pub type Loc = usize;
 pub type Span = (Loc, Loc);
+
+/* nasty more information about panic hack */
+thread_local! {
+    pub static LAST_LOC : RefCell<Loc> = RefCell::new(0);
+}
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Tok<'input> {
@@ -56,6 +62,9 @@ impl<'input> Lexer<'input> {
             None => {
                 self.last = self.chars.next()
             }
+        }
+        if let Some((new_loc, _)) = self.last {
+            LAST_LOC.with(|loc| { *loc.borrow_mut() = new_loc });
         }
         assert_eq!(self.pending, None);
         debug!("next is {:?}", self.last);

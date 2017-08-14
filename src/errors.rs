@@ -57,6 +57,7 @@ pub enum Error {
     ExpectedStatementFoundExpr(SpannedExpr),
     UnterminatedComment(Loc),
     LexicalError(Loc),
+    InternalParserErrorNear(Span, String),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -398,6 +399,11 @@ impl Error {
                 error(output, &format!("Found expression, expected assignment or declaration:"))?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
+            Error::InternalParserErrorNear(ref span, ref info) => {
+                error(output, &format!("Interal parser error near here:"))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+                error_continue(output, &format!("Syntax error, parser bug, or both.\nInternal info about error: {}", info))?;
+            },
             _ => {
                 error(output, &format!("{:?}", *self))?;
             }
@@ -487,6 +493,7 @@ impl error::Error for Error {
             Error::MultipleErrors(_) => "multiple errors",
             Error::IoError(_) => "an I/O error occurred",
             Error::FmtError(_) => "a formatting error occurred",
+            Error::InternalParserErrorNear(_, _) => "internal parser error",
         }
     }
 

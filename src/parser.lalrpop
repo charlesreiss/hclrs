@@ -154,10 +154,6 @@ BinOpOr : BinOpCode = {
 BinOpMulDiv : BinOpCode = {
     "*" => BinOpCode::Mul,
     "/" => BinOpCode::Div,
-    ! => {
-        errors.push(<>);
-        BinOpCode::Error
-    },
 };
 
 BinOpCompare : BinOpCode = {
@@ -242,6 +238,10 @@ Term : SpannedExpr = {
 
 // public for testing
 pub Expr: SpannedExpr = {
+    <e:Expr> <error:!> => {
+        errors.push(error);
+        e
+    },
     ExprLogicalOr,
 };
 
