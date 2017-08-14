@@ -76,7 +76,13 @@ fn main_real() -> Result<bool, Error> {
     }
     let filename: &str = &free_args[0];
     let path = Path::new(filename);
-    let file_contents = read_y86_hcl(path)?;
+    let file_contents = match read_y86_hcl(path) {
+        Err(e) => {
+            writeln!(stderr(), "Error reading '{}': {}", path.display(), e).unwrap();
+            return Ok(false)
+        },
+        Ok(contents) => contents
+    };
     if free_args.len() > 3 {
         print_usage(&program_name, opts);
         return Ok(false);
@@ -102,7 +108,7 @@ fn main_real() -> Result<bool, Error> {
             match u32::from_str_radix(&free_args[2], 10) {
                 Ok(x) => x,
                 Err(_) => {
-                    print!("timeout {} is not a number", &free_args[2]);
+                    writeln!(stderr(), "timeout {} is not a valid number", &free_args[2]).unwrap();
                     return Ok(false);
                 }
             }
@@ -110,7 +116,6 @@ fn main_real() -> Result<bool, Error> {
             9999
         };
     let path = Path::new(filename);
-    let file_contents = read_y86_hcl(path)?;
     let yo_path = Path::new(yo_filename);
     match run_y86(running_program, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout) {
         Err(e) => {
