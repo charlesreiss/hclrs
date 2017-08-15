@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
@@ -98,9 +99,14 @@ impl FileContents {
     }
 
     pub fn show_region(&self, start: usize, end: usize) -> String {
+        let end = min(end, self.data.len().saturating_sub(1));
+        let start = min(start, end);
         let filename = self.filename(start);
         let (begin_line_no, begin_loc, _) = self.line_number_and_bounds(start);
         let (end_line_no, begin_last_line, end_loc) = self.line_number_and_bounds(end);
+        let end_loc = min(end_loc, self.data.len().saturating_sub(1));
+
+        debug!("range is {}-{}", begin_loc, end_loc);
 
         let begin_line_offset = start - begin_loc;
         let end_line_offset = end - begin_last_line;

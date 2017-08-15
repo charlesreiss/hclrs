@@ -94,6 +94,11 @@ WidthConstant : WireWidth = {
             Err(ParseError::User { error: Error::InvalidWireWidth((start, end)) })
         }
     },
+    // XXX workaround for error recovery issue
+    <error:!> => {
+        errors.push(error);
+        WireWidth::Bits(0)
+    }
 };
 
 SimpleConstant : u8 = {
@@ -104,16 +109,24 @@ SimpleConstant : u8 = {
             Err(ParseError::User { error: Error::InvalidConstant((start, end)) })
         }
     },
+    // XXX workaround for error recovery issue
+    <error:!> => {
+        errors.push(error);
+        0
+    }
 };
 
 
 WireDecl : WireDecl = {
-    <start:@R> <name:ID> ":" <width:WidthConstant> <end:@L>  =>
-        WireDecl { name: String::from(name), width: width, span: (start, end), },
-    <error:!> => {
-        errors.push(error);
-        WireDecl { name: String::from("<error>"), width: WireWidth::Bits(0), span: (0, 0) }
-    },
+    <start:@R> <name:IDWithSpan> ":" <width:WidthConstant> <end:@L>  =>
+        WireDecl { name: String::from(name.0), width: width, span: (start, end), },
+    <start:@R> <name:IDWithSpan> <end:@L>  => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::MissingWireWidth((start, end)) },
+            dropped_tokens: vec!(),
+        });
+        WireDecl { name: String::from(name.0), width: WireWidth::Bits(0), span: (start, end) }
+    }
 };
 
 // public for testing
@@ -123,6 +136,13 @@ pub WireDecls : Vec<WireDecl> = {
 
 ConstDecl : ConstDecl = {
     <name:IDWithSpan> "=" <e:Expr> => ConstDecl { name: String::from(name.0), name_span: name.1, value: e },
+    <name:IDWithSpan> <start:@R> ":" <width:WidthConstant> <end:@R> "=" <e:Expr> => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::AddedConstWidth((start, end)) },
+            dropped_tokens: vec!(),
+        });
+        ConstDecl { name: String::from(name.0), name_span: name.1, value: e }
+    },
     <error:!> => {
         errors.push(error);
         ConstDecl { name: String::from("<error>"), value: SpannedExpr::new((0,0), Expr::Error), name_span: (0, 0) }
@@ -266,11 +286,21 @@ Assignment : Assignment = {
 };
 
 RegisterDecl : RegisterDecl = {
-    <start:@R> <n:ID> ":" <w:WidthConstant> "=" <e:Expr> <end:@L> => {
-        RegisterDecl { name: String::from(n), width: w, default: e,
+    <start:@R> <n:IDWithSpan> "=" <e:Expr> <end:@L> => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::MissingRegisterWidth((start, end)) },
+            dropped_tokens: vec!(),
+        });
+        RegisterDecl { name: String::from("<error>"), width: WireWidth::from(0),
+		       default: SpannedExpr::new((start,end), Expr::Error),
                        span: (start,end), }
     },
-    <start:@R> ! <end:@L> => {
+    <start:@R> <n:IDWithSpan> ":" <w:WidthConstant> "=" <e:Expr> <end:@L> => {
+        RegisterDecl { name: String::from(n.0), width: w, default: e,
+                       span: (start,end), }
+    },
+    <start:@R> <n:IDWithSpan> <e:!> <end:@L> => {
+        errors.push(e);
         RegisterDecl { name: String::from("<error>"), width: WireWidth::from(0),
 		       default: SpannedExpr::new((start,end), Expr::Error),
                        span: (start,end), }
@@ -295,12 +325,12 @@ StatementNeedSemi : Statement = {
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
     <e:Expr> => {
-        match *e.expr {
-            Expr::Error => {},
-            _ => errors.push(ErrorRecovery {
+        if errors.len() == 0 {
+            /* Assume we'd give a duplicate error if there are already other pending errors */
+            errors.push(ErrorRecovery {
                 error: ParseError::User { error: Error::ExpectedStatementFoundExpr(e) },
                 dropped_tokens: vec!(),
-            }),
+            })
         }
         Statement::Error
     }

@@ -1092,6 +1092,147 @@ fn regression_bogus_mux_width() {
          Stat = 0;
          pc = 0;
          ");
-    println!("{}", message);
     assert!(message.contains("Mismatched wire widths"));
+}
+
+#[test]
+fn error_recovery_midassignment() {
+    init_logger();
+    let message = get_errors_for(
+        "foo := 1;
+         Stat = STAT_AOK;
+         pc = 0;
+         ");
+    debug!("error: {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+    assert!(!message.contains("Found expression, expected"));
+}
+
+#[test]
+fn error_recovery_missing_register_width1() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "register xX {
+            foo = 42;
+            bar : 32 = * 42;
+        }"
+    );
+    assert!(message.contains("Register declaration missing width"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_missing_register_width2() {
+    init_logger();
+    let message = get_errors_for(
+        "register xX {
+            foo : = 42;
+            bar : 32 = * 42;
+        }"
+    );
+    assert!(message.contains("Unexpected token '=', expected"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_register_early_semi() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "register xX {
+            foo;
+            bar : 32 = * 42;
+        }"
+    );
+    assert!(message.contains("Unexpected token ';', expected"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_const_width() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "const FOO : 42 = 0;
+         const BAR * 42 = 0;"
+    );
+    assert!(message.contains("Constant declaration has unsupported"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_wire_value_and_width() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "wire foo : 42 = 0;
+         wire foo : * 42;"
+    );
+    assert!(message.contains("Unexpected token '=', expected"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_wire_value_no_width() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "wire foo = 0;
+         wire foo : * 42;"
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("missing width"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_wire_no_value_no_width() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "wire foo;
+         wire foo : * 42;"
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("missing width"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_assignment_width() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "foo : 42 = 0;
+         foo = * 42;"
+    );
+    assert!(message.contains("Unexpected token ':', expected"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_bitslice_expr1() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "foo = bar[quux + 1..3];
+         foo = * bar;"
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token 'quux', expected"));
+    assert!(message.contains("Unexpected token '*', expected"));
+}
+
+#[test]
+fn error_recovery_bitslice_expr2() {
+    init_logger();
+    // TODO: custom error for this case?
+    let message = get_errors_for(
+        "foo = bar[1 + quux..3];
+         foo = * bar;"
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token '+', expected"));
+    assert!(message.contains("Unexpected token '*', expected"));
 }

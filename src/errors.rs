@@ -58,6 +58,9 @@ pub enum Error {
     UnterminatedComment(Loc),
     LexicalError(Loc),
     InternalParserErrorNear(Span, String),
+    MissingWireWidth(Span),
+    MissingRegisterWidth(Span),
+    AddedConstWidth(Span),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -340,6 +343,18 @@ impl Error {
                 error(output, "Bit selection expression selects less than 0 bits:")?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
+            Error::MissingWireWidth(ref span) => {
+                error(output, "Wire declaration missing width:")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            },
+            Error::MissingRegisterWidth(ref span) => {
+                error(output, "Register declaration missing width:")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            },
+            Error::AddedConstWidth(ref span) => {
+                error(output, "Constant declaration has unsupported explicit width:")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            },
             Error::InvalidConstant(ref span) => {
                 error(output, "Constant value is out of range:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -363,7 +378,12 @@ impl Error {
                 error(output, &format!("Could not parse '{}' in .yo file.", line))?;
             },
             Error::UnrecognizedToken { ref location, ref expected } => {
-                let token = &contents.data()[location.0..location.1];
+                let token;
+                if location.1 >= contents.data().len() {
+                    token = "<end of file>";
+                } else {
+                    token = &contents.data()[location.0..location.1];
+                }
                 let expected_formatted = format_token_list(expected);
                 error(output, &format!("Unexpected token '{}', expected {}:",
                     token, expected_formatted))?;
@@ -484,6 +504,9 @@ impl error::Error for Error {
             Error::MisorderedBitIndexes(_) => "misordered bit indexes in bitslice",
             Error::UnterminatedComment(_) => "unterminated /*-style comment",
             Error::ExpectedStatementFoundExpr(_) => "statement expected; found expression",
+            Error::MissingWireWidth(_) => "wire declaration missing width",
+            Error::MissingRegisterWidth(_) =>"register declaration missing width",
+            Error::AddedConstWidth(_) =>"constnat declaration has unsupported width",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",
