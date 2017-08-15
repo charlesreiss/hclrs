@@ -100,12 +100,12 @@ pub fn disassemble<W: Write>(w: &mut W, instruction: u128) -> Result<u8, io::Err
             2
         },
         11 => {
-            write!(w, "popq {}", name_register(rb))?;
+            write!(w, "popq {}", name_register(ra))?;
             2
         },
         _ => {
             write!(w, "<invalid>")?;
-            0
+            1
         }
     };
     return Ok(used_bytes);
@@ -117,15 +117,21 @@ pub fn disassemble_to_string(instruction: u128) -> (u8, String) {
     (bytes, String::from_utf8(result).unwrap())
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
+    use super::disassemble_to_string;
+    use super::u128;
     #[test]
     fn simple() {
-        assert_eq!(disassemble_to_string(u128::new(0x00)), (1, "halt"));
-        assert_eq!(disassemble_to_string(u128::new(0x10)), (1, "nop"));
-        assert_eq!(disassemble_to_string(u128::new(0x8920)), (2, "rrmovq %r8, %r9"));
-        assert_eq!(disassemble_to_string(u128::new(0xDEADBEEF71)), (9, "jle 0xDEADBEEF"));
-        assert_eq!(disassemble_to_string(u128::new(0x8961)), (2, "subq %r8, %r9"));
-        assert_eq!(disassemble_to_string(u128::new(0xDEADBEEF8940)), (10, "rmmovq %r8, 0xDEADBEEF(%r9)"));
+        assert_eq!(disassemble_to_string(u128::new(0x00)), (1, String::from("halt")));
+        assert_eq!(disassemble_to_string(u128::new(0x10)), (1, String::from("nop")));
+        assert_eq!(disassemble_to_string(u128::new(0x3fb0)), (2, String::from("popq %rbx")));
+        assert_eq!(disassemble_to_string(u128::new(0x3fa0)), (2, String::from("pushq %rbx")));
+        assert_eq!(disassemble_to_string(u128::new(0x8920)), (2, String::from("rrmovq %r8, %r9")));
+        // 71 FE BE AD / DE AA AA AA
+        assert_eq!(disassemble_to_string(u128::from_parts(0xAAAAAAAAAAAAAA00, 0xDEADBEEF71)), (9, String::from("jle 0xdeadbeef")));
+        assert_eq!(disassemble_to_string(u128::new(0x8961)), (2, String::from("subq %r8, %r9")));
+        assert_eq!(disassemble_to_string(u128::from_parts(0xAAAAAAAAAAAA0000, 0x0000DEADBEEF8940)), (10, String::from("rmmovq %r8, 0xdeadbeef(%r9)")));
+        assert_eq!(disassemble_to_string(u128::from_parts(0x000000000000FFFF, 0xFFFFFFFFFFFFFA30)), (10, String::from("irmovq $0xffffffffffffffff, %r10")));
     }
 }

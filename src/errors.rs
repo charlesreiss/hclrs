@@ -405,7 +405,7 @@ impl Error {
                 error_continue(output, &format!("Syntax error, parser bug, or both.\nInternal info about error: {}", info))?;
             },
             _ => {
-                error(output, &format!("{:?}", *self))?;
+                error(output, &format!("{}", *self))?;
             }
         }
         Ok(())
