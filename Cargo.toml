@@ -27,7 +27,7 @@ version = "0.13.1"
 
 # For u128
 [dependencies.extprim]
-version = "1.2.2"
+version = "1.4.0"
 
 [dependencies.num-traits]
 version = "0.1.39"
