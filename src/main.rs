@@ -122,7 +122,6 @@ fn main_real() -> Result<bool, Error> {
         } else {
             9999
         };
-    let path = Path::new(filename);
     let yo_path = Path::new(yo_filename);
     match run_y86(running_program, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout) {
         Err(e) => {
