@@ -443,8 +443,6 @@ impl SpannedExpr {
                     all_widths.push(option_width);
                     if let Some(cur_width) = maybe_width {
                         maybe_width = cur_width.combine(option_width);
-                    } else {
-                        break;
                     }
                 }
                 match maybe_width {

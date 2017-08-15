@@ -571,9 +571,10 @@ wire foo : 10, bar: 11, quux: 10;
 foo = 0;
 bar = 1;
 quux = [
+    foo > 42 : 1;
     foo > 3 : foo;
     foo < 3 : bar;
-    1 : 0;
+    1 : 0b0;
 ];
 Stat = STAT_AOK;
 pc = 0;
@@ -582,8 +583,10 @@ pc = 0;
     assert!(message.contains("Mismatched wire widths for mux options"));
     assert!(message.contains("1 option is 10 bits wide"));
     assert!(message.contains("1 option is 11 bits wide"));
+    assert!(message.contains("1 option is 1 bits wide"));
     assert!(message.contains("foo > 3 : foo;"));
     assert!(message.contains("foo < 3 : bar;"));
+    assert!(message.contains("1 : 0b0;"));
 }
 
 #[test]
@@ -1047,6 +1050,25 @@ Stat = STAT_AOK;
     debug!("error message is {}", message);
     assert!(message.contains("Unexpected token 'bar', expected"));
     assert!(message.contains("a binary operator"));
+    assert!(message.contains("a comparison operator"));
+    assert!(message.contains("\'..\'"));
+    assert!(message.contains("\'[\'"));
+}
+
+#[test]
+fn error_summarize_binary_operators_only() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 32, bar : 32;
+foo = (bar == bar quux);
+bar = 42;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token 'quux', expected"));
+    assert!(message.contains("a binary operator"));
+    assert!(!message.contains("a comparison operator"));
     assert!(message.contains("\'..\'"));
     assert!(message.contains("\'[\'"));
 }

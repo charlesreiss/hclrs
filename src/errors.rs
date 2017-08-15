@@ -100,9 +100,11 @@ fn s_are(i: usize) -> &'static str {
 }
 
 fn format_token_list(tokens: &Vec<String>) -> String {
+    let all_compare_operators = vec!(
+        "!=", "<", "<=", "==", ">", ">=", ">>",
+    );
     let all_bin_operators = vec!(
-        "!=", "&", "&&", "*", "+", "-", "/", "<", "<<", "<=", "==", ">", ">=", ">>",
-        "^", "|", "||", "in"
+        "&", "&&", "*", "+", "-", "/", "<<", "^", "|", "||", "in"
     );
     let all_un_operators = vec!(
         "!", "-", "~"
@@ -114,6 +116,13 @@ fn format_token_list(tokens: &Vec<String>) -> String {
     let mut token_set: HashSet<String> = HashSet::new();
     for token in tokens {
         token_set.insert(token.clone());
+    }
+    let mut num_compare_operators = 0;
+    for operator in &all_compare_operators {
+        let quoted_operator = format!("\"{}\"", operator);
+        if token_set.contains(&quoted_operator) {
+            num_compare_operators += 1;
+        }
     }
     let mut num_bin_operators = 0;
     for operator in &all_bin_operators {
@@ -130,6 +139,13 @@ fn format_token_list(tokens: &Vec<String>) -> String {
         }
     }
     let mut found_list = Vec::new();
+    if num_compare_operators == all_compare_operators.len() {
+        found_list.push(String::from("a comparison operator"));
+        for operator in &all_bin_operators {
+            let quoted_operator = format!("\"{}\"", operator);
+            token_set.remove(&quoted_operator);
+        }
+    }
     if num_bin_operators == all_bin_operators.len() {
         found_list.push(String::from("a binary operator"));
         for operator in &all_bin_operators {
@@ -226,7 +242,7 @@ impl Error {
                 ref register_width, ref expression_width
             } => {
                 error(output, &format!(
-                    "Register '{}' in bank '{}' is {} bits wide, but default value is\
+                    "Register '{}' in bank '{}' is {} bits wide, but default value is \
                      {} bits wide:\n",
                      register_name, bank, register_width.bits_or_128(), expression_width.bits_or_128()))?;
                 write!(output, "{}", contents.show_region(default_expression.span.0, default_expression.span.1))?;
