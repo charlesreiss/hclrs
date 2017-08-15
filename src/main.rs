@@ -47,6 +47,8 @@ fn print_usage(program_name: &str, opts: Options) {
     print!("{}", opts.usage(&header));
 }
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 fn main_real() -> Result<bool, Error> {
     let args: Vec<String> = env::args().collect();
     let program_name = args[0].clone();
@@ -56,12 +58,17 @@ fn main_real() -> Result<bool, Error> {
     opts.optflag("q", "quiet", "only output state at the end");
     opts.optflag("t", "testing", "do not output custom register banks (for autograding)");
     opts.optflag("h", "help", "print this help menu");
+    opts.optflag("", "version", "print version number");
     let parsed_opts = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!(f.to_string()),
     };
     if parsed_opts.opt_present("h") {
         print_usage(&program_name, opts);
+        return Ok(true);
+    }
+    if parsed_opts.opt_present("version") {
+        print!("HCLRS version {}", VERSION);
         return Ok(true);
     }
     let mut step_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
