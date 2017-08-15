@@ -141,7 +141,7 @@ fn format_token_list(tokens: &Vec<String>) -> String {
     let mut found_list = Vec::new();
     if num_compare_operators == all_compare_operators.len() {
         found_list.push(String::from("a comparison operator"));
-        for operator in &all_bin_operators {
+        for operator in &all_compare_operators {
             let quoted_operator = format!("\"{}\"", operator);
             token_set.remove(&quoted_operator);
         }
