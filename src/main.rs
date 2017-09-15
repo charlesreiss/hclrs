@@ -103,6 +103,7 @@ fn main_real() -> Result<bool, Error> {
             Ok(p) => p,
         };
     if check_only {
+        println!("syntax OK");
         return Ok(true);
     }
     if free_args.len() < 2 || free_args.len() > 3 {
