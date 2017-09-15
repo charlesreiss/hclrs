@@ -68,7 +68,7 @@ fn main_real() -> Result<bool, Error> {
         return Ok(true);
     }
     if parsed_opts.opt_present("version") {
-        print!("HCLRS version {}", VERSION);
+        println!("HCLRS version {}", VERSION);
         return Ok(true);
     }
     let mut step_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
