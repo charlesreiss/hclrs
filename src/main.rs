@@ -1,7 +1,7 @@
 extern crate env_logger;
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, Write, stdout, stderr, sink};
+use std::io::{BufReader, Write, stdin, stdout, stderr, sink};
 use std::path::Path;
 use std::process;
 
@@ -28,13 +28,24 @@ fn parse_y86(file_contents: &FileContents) -> Result<RunningProgram, Error> {
     Ok(running_program)
 }
 
+fn press_enter() {
+    let mut input = String::new();
+    println!("(press enter to continue)");
+    stdin().read_line(&mut input).unwrap();
+}
+
 fn run_y86<W1: Write, W2: Write, W3: Write>(mut running_program: RunningProgram, yo_path: &Path,
            trace_out: &mut W1, step_out: &mut W2,
-           disasm_out: &mut W3,  dump_registers: bool, timeout: u32) -> Result<(), Error> {
+           disasm_out: &mut W3,  dump_registers: bool, timeout: u32,
+           interactive: bool) -> Result<(), Error> {
     let mut yo_reader = BufReader::new(File::open(yo_path)?);
     running_program.set_timeout(timeout);
     running_program.load_memory_y86(&mut yo_reader)?;
-    running_program.run_with_trace(step_out, trace_out, disasm_out, dump_registers)?;
+    if interactive {
+        running_program.run_with_trace_and_prompt(step_out, trace_out, disasm_out, dump_registers, press_enter)?;
+    } else {
+        running_program.run_with_trace(step_out, trace_out, disasm_out, dump_registers)?;
+    }
     print!("{}", running_program.dump_y86_str(dump_registers));
     Ok(())
 }
@@ -58,10 +69,14 @@ fn main_real() -> Result<bool, Error> {
     opts.optflag("q", "quiet", "only output state at the end");
     opts.optflag("t", "testing", "do not output custom register banks (for autograding)");
     opts.optflag("h", "help", "print this help menu");
+    opts.optflag("i", "interactive", "prompt after each cycle");
     opts.optflag("", "version", "print version number");
     let parsed_opts = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!(f.to_string()),
+        Err(f) => {
+            writeln!(stderr(), "{}", f.to_string()).unwrap();
+            return Ok(false);
+        }
     };
     if parsed_opts.opt_present("h") {
         print_usage(&program_name, opts);
@@ -76,6 +91,7 @@ fn main_real() -> Result<bool, Error> {
     let mut trace_out: Box<Write> = if parsed_opts.opt_present("d") { Box::new(stdout()) } else { Box::new(sink()) };
     let dump_registers = !parsed_opts.opt_present("t");
     let check_only = parsed_opts.opt_present("c");
+    let interactive = parsed_opts.opt_present("i");
     let free_args = parsed_opts.free;
     if free_args.len() < 1 {
         print_usage(&program_name, opts);
@@ -124,7 +140,7 @@ fn main_real() -> Result<bool, Error> {
             9999
         };
     let yo_path = Path::new(yo_filename);
-    match run_y86(running_program, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout) {
+    match run_y86(running_program, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout, interactive) {
         Err(e) => {
             e.format_for_contents(&mut stderr(), &file_contents)?;
             return Ok(false);

@@ -1019,15 +1019,25 @@ impl RunningProgram {
         self.run_with_trace(&mut sink(), &mut sink(), &mut sink(), false)
     }
 
+    pub fn run_with_trace_and_prompt<W1: Write, W2: Write, W3: Write, F>(&mut self,
+                step_out: &mut W1, trace_out: &mut W2,
+                disasm_out: &mut W3,
+                dump_registers: bool,
+                prompt: F) -> Result<(), Error>
+            where F: Fn() -> () {
+        while !self.done() {
+            self.dump_y86(step_out, dump_registers)?;
+            self.step_with_trace(trace_out, disasm_out)?;
+            prompt();
+        }
+        Ok(())
+    }
+
     pub fn run_with_trace<W1: Write, W2: Write, W3: Write>(&mut self,
                 step_out: &mut W1, trace_out: &mut W2,
                 disasm_out: &mut W3,
                 dump_registers: bool) -> Result<(), Error> {
-        while !self.done() {
-            self.dump_y86(step_out, dump_registers)?;
-            self.step_with_trace(trace_out, disasm_out)?;
-        }
-        Ok(())
+        self.run_with_trace_and_prompt(step_out, trace_out, disasm_out, dump_registers, || {})
     }
 
     pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) -> Result<(), Error> {
