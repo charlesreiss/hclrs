@@ -253,6 +253,15 @@ Term : SpannedExpr = {
     <start:@R> <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> "]" <end:@L> => {
         SpannedExpr::new((start,end), Expr::BitSelect { from: e, low: low, high: high })
     },
+    <start:@R> <e:SimpleTerm> "[" <low:SimpleConstant> <error:!> => {
+        errors.push(error);
+        e
+    },
+    // XXX workaround for error recovery issue
+    <start:@R> <e:SimpleTerm> "[" <low:SimpleConstant> ".." <high:SimpleConstant> <error:!> => {
+        errors.push(error);
+        e
+    },
     <e:SimpleTerm> => e,
 };
 
@@ -315,7 +324,16 @@ RegisterBankDecl : RegisterBankDecl = {
             registers: r,
             span: (start,end),
         }
-    }
+    },
+    <start:@R> "register" <i:IDWithSpan> <error:!> <end:@L> => {
+        errors.push(error);
+        RegisterBankDecl {
+            name: String::from(i.0),
+            name_span: i.1,
+            registers: vec!(),
+            span: (start,end),
+        }
+    },
 };
 
 Assignments : Vec<Assignment> = Commas1<Assignment>;

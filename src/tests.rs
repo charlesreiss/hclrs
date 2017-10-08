@@ -1258,3 +1258,128 @@ fn error_recovery_bitslice_expr2() {
     assert!(message.contains("Unexpected token '+', expected"));
     assert!(message.contains("Unexpected token '*', expected"));
 }
+
+#[test]
+fn error_recovery_bool_wire_and_colons() {
+    init_logger();
+    let message = get_errors_for(
+        "bool mem_read = icode in { MRMOVQ };
+         reg_srcA = [
+                 icode in {RRMOVQ, CMOVXX, RMMOVQ, MRMOVQ, PUSHQ, OPQ} : opcode[8:12];
+                 1 : REG_NONE;
+         ];
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token 'mem_read', expected"));
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_wire_index() {
+    init_logger();
+    let message = get_errors_for(
+        "
+         reg_srcA = [
+                 icode in {RRMOVQ, CMOVXX, RMMOVQ, MRMOVQ, PUSHQ, OPQ} : opcode[8:12];
+                 1 : REG_NONE;
+         ];
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_wire_concat() {
+    init_logger();
+    let message = get_errors_for(
+        "
+         reg_srcA = (opcode : opcode);
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_wire_concat2() {
+    init_logger();
+    let message = get_errors_for(
+        "
+         reg_srcA = (opcode .. :);
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_register_bank() {
+    init_logger();
+    let message = get_errors_for(
+        "register :
+         "
+    );
+    debug!("message is {}", message);
+    // FIXME: this should output a better error than it currently does
+    assert!(message.contains("Unexpected token "));
+}
+
+#[test]
+fn error_colons_const_name() {
+    init_logger();
+    let message = get_errors_for(
+        "const :
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_after_register_bank() {
+    init_logger();
+    let message = get_errors_for(
+        "register fD : 64
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_after_register_bank2() {
+    init_logger();
+    let message = get_errors_for(
+        "register fD {
+            foo : 64 = 32;
+        } : 64 = 42;
+        "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colons_register_name() {
+    init_logger();
+    let message = get_errors_for(
+        "register fD { : 64
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+// TODO: custom error for this?
+#[test]
+fn error_wire_decl_as_assign() {
+    init_logger();
+    let message = get_errors_for(
+        "wire foo = 42;
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token '=', expected"));
+}
