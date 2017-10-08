@@ -436,7 +436,7 @@ impl Error {
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
             Error::InternalParserErrorNear(ref span, ref info) => {
-                error(output, &format!("Interal parser error near here:"))?;
+                error(output, &format!("Internal parser error near here:"))?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
                 error_continue(output, &format!("Syntax error, parser bug, or both.\nInternal info about error: {}", info))?;
             },
