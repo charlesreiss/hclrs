@@ -1383,3 +1383,26 @@ fn error_wire_decl_as_assign() {
     debug!("message is {}", message);
     assert!(message.contains("Unexpected token '=', expected"));
 }
+
+#[test]
+fn error_colon_in_list1() {
+    init_logger();
+    let message = get_errors_for(
+        "foo = bar in { FOO : QUUX }
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("Unexpected token ':', expected"));
+}
+
+#[test]
+fn error_colon_after_in1() {
+    init_logger();
+    let message = get_errors_for(
+        "foo = bar in :
+         "
+    );
+    debug!("message is {}", message);
+    // FIXME: error could be better
+    assert!(message.contains("Unexpected token "));
+}

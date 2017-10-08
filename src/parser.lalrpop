@@ -219,6 +219,11 @@ ExprIn: SpannedExpr = {
         let v = l.into_iter().collect();
         SpannedExpr::new((start, end), Expr::InSet(e, v))
     },
+    // XXX workaround for error recovery issue
+    <start:@R> <e:ExprOr> "in" <error:!> <end:@L> => {
+        errors.push(error);
+        SpannedExpr::new((start, end), Expr::InSet(e, vec!()))
+    },
     ExprOr
 };
 ExprOr = BinTier<BinOpOr, ExprXor>;
