@@ -36,6 +36,7 @@ pub enum Error {
     NonConstantWireRead(String, SpannedExpr),
     UnsetWire(String, Span),
     UnsetBuiltinWire(String),
+    UnsetRegisterInputWire { name: String, register_span: Span },
     RedeclaredWire(String, Span, Span),
     DoubleAssignedWire(String, Span, Span),
     DoubleAssignedRegisterWire {
@@ -292,7 +293,12 @@ impl Error {
                             "Wire '{}' required by fixed functionality but never assigned.",
                             name))?;
             },
-            // FIXME: add where this error happens
+            Error::UnsetRegisterInputWire { ref name, ref register_span } => {
+                error(output, &format!(
+                            "Wire '{}' never assigned, but is input to the register defined here:",
+                            name))?;
+                write!(output, "{}", contents.show_region(register_span.0, register_span.1))?;
+            },
             Error::RedeclaredWire(ref name, ref new_span, ref old_span) => {
                 error(output, &format!("Wire '{}' redeclared. Declared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
@@ -515,6 +521,7 @@ impl error::Error for Error {
             Error::NonConstantWireRead(_,_) => "non-constant wire read",
             Error::UnsetWire(_,_) => "wire defined but never assigned",
             Error::UnsetBuiltinWire(_) => "builtin wire required but never assigned",
+            Error::UnsetRegisterInputWire {..} => "builtin wire required but never assigned",
             Error::DoubleAssignedWire(_,_,_) => "multiply assigned wire found",
             Error::DoubleAssignedFixedOutWire(_,_) => "wire assigned by fixed functionality also assigned manually",
             Error::DoubleAssignedRegisterWire {..} => "wire assigned by register also assigned manually",

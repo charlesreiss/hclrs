@@ -1413,9 +1413,22 @@ fn error_pipeline_register_out_set() {
     let message = get_errors_for(
         "register xY { foo : 1 = 0; }
         Y_foo = 1;
+        x_foo = 0;
+         "
+    );
+    debug!("message is {}", message);
+    assert!(message.contains("assigned directly here"));
+}
+
+#[test]
+fn error_register_in_not_set() {
+    init_logger();
+    let message = get_errors_for(
+        "register xY { foo : 1 = 0; }
          "
     );
     debug!("message is {}", message);
     // FIXME: error could be better
-    assert!(message.contains("assigned directly here"));
+    assert!(message.contains("input to the register defined here"));
+    assert!(!message.contains("fixed functionality"));
 }

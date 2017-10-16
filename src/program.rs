@@ -556,6 +556,7 @@ impl Program {
         let mut assignments = HashMap::new();
         let mut register_banks_raw = Vec::new();
         let mut fixed_out_wires = HashSet::new();
+        let mut register_in_spans = HashMap::new();
         let mut errors = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
@@ -701,6 +702,7 @@ impl Program {
                 if found_error {
                     continue;
                 }
+
                 match register.default.evaluate(&constants) {
                     Ok(value) => {
                         if None == value.width.combine(register.width) {
@@ -713,6 +715,7 @@ impl Program {
                             });
                         }
                         defaults.insert(out_name.clone(), value.as_width(register.width));
+                        register_in_spans.insert(in_name.clone(), register.span.clone());
                         debug!("Generated wires {} and {} for register", in_name, out_name);
                         signals.push((in_name, out_name, register.width));
                     },
@@ -754,13 +757,15 @@ impl Program {
             // Step 4: Check for missing wires
             for name in needed_wires {
                 if !assignments.contains_key(name) {
-                    match wire_decl_spans.get(name) {
-                        Some(span) => {
+                    if let Some(span) = wire_decl_spans.get(name) {
                             errors.push(Error::UnsetWire(String::from(name), *span));
-                        },
-                        None => {
-                            errors.push(Error::UnsetBuiltinWire(String::from(name)));
-                        },
+                    } else if let Some(span) = register_in_spans.get(name) {
+                        errors.push(Error::UnsetRegisterInputWire {
+                            name: String::from(name),
+                            register_span: *span,
+                        });
+                    } else {
+                        errors.push(Error::UnsetBuiltinWire(String::from(name)));
                     }
                 }
             }
