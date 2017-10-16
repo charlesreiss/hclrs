@@ -1406,3 +1406,16 @@ fn error_colon_after_in1() {
     // FIXME: error could be better
     assert!(message.contains("Unexpected token "));
 }
+
+#[test]
+fn error_pipeline_register_out_set() {
+    init_logger();
+    let message = get_errors_for(
+        "register xY { foo : 1 = 0; }
+        Y_foo = 1;
+         "
+    );
+    debug!("message is {}", message);
+    // FIXME: error could be better
+    assert!(message.contains("assigned directly here"));
+}

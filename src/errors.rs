@@ -38,6 +38,11 @@ pub enum Error {
     UnsetBuiltinWire(String),
     RedeclaredWire(String, Span, Span),
     DoubleAssignedWire(String, Span, Span),
+    DoubleAssignedRegisterWire {
+        name: String,
+        register_span: Span,
+        assign_span: Span,
+    },
     DoubleAssignedFixedOutWire(String, Span),
     RedeclaredBuiltinWire(String, Span),
     PartialFixedInput {
@@ -304,6 +309,12 @@ impl Error {
                 error(output, &format!("Wire '{}' is output for fixed functionality but is assigned here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
             },
+            Error::DoubleAssignedRegisterWire { ref name, ref register_span , ref assign_span } => {
+                error(output, &format!("Wire '{}' is output of a register declared here:", name))?;
+                write!(output, "{}", contents.show_region(register_span.0, register_span.1))?;
+                error_continue(output, &format!("but wire '{}' is assigned directly here:", name))?;
+                write!(output, "{}", contents.show_region(assign_span.0, assign_span.1))?;
+            },
             Error::RedeclaredBuiltinWire(ref name, ref new_span) => {
                 error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
@@ -506,6 +517,7 @@ impl error::Error for Error {
             Error::UnsetBuiltinWire(_) => "builtin wire required but never assigned",
             Error::DoubleAssignedWire(_,_,_) => "multiply assigned wire found",
             Error::DoubleAssignedFixedOutWire(_,_) => "wire assigned by fixed functionality also assigned manually",
+            Error::DoubleAssignedRegisterWire {..} => "wire assigned by register also assigned manually",
             Error::RedeclaredWire(_,_,_) => "multiply defined wire found",
             Error::RedeclaredBuiltinWire(_,_) => "redefined wire from fixed functionality",
             Error::PartialFixedInput {..} => "part of fixed functionality set, but not all",

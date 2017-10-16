@@ -689,6 +689,15 @@ impl Program {
                         register_name: register.name.clone(),
                     });
                 }
+                if assignments.contains_key(out_name.as_str()) {
+                    found_error = true;
+                    errors.push(Error::DoubleAssignedRegisterWire {
+                        name: out_name.clone(),
+                        assign_span: assign_spans.get(out_name.as_str()).unwrap().clone(),
+                        register_span: register.span.clone(),
+                    });
+                }
+
                 if found_error {
                     continue;
                 }
