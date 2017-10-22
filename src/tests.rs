@@ -1432,3 +1432,12 @@ fn error_register_in_not_set() {
     assert!(message.contains("input to the register defined here"));
     assert!(!message.contains("fixed functionality"));
 }
+
+#[test]
+fn error_built_in_set_twice() {
+    init_logger();
+    let message = get_errors_for(
+        "Stat = STAT_AOK; Stat = STAT_HLT; pc = 0;
+         ");
+    assert!(message.contains("Wire 'Stat' assigned"));
+}
