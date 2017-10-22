@@ -830,6 +830,41 @@ Stat = STAT_AOK;
 }
 
 #[test]
+fn error_wire_loop_via_reg() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+Stat = STAT_AOK;
+wire quux : 64;
+reg_srcA = quux[0..4];
+quux = reg_outputA;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Circular dependency detected:"));
+    assert!(message.contains("'reg_srcA' depends on 'quux'"));
+    assert!(message.contains("'quux' depends on 'reg_outputA'"));
+    assert!(message.contains("'reg_outputA' depends on 'reg_srcA'"));
+}
+
+#[test]
+fn error_wire_loop_via_memory() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+Stat = STAT_AOK;
+wire quux : 64;
+mem_addr = 0;
+mem_readbit = quux[0..1];
+quux = mem_output;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Circular dependency detected:"));
+    assert!(message.contains("'mem_readbit' depends on 'quux'"));
+    assert!(message.contains("'quux' depends on 'mem_output'"));
+    assert!(message.contains("'mem_output' depends on 'mem_readbit'"));
+}
+
+#[test]
 fn error_invalid_wire_width() {
     init_logger();
     let message = get_errors_for("
@@ -1440,4 +1475,13 @@ fn error_built_in_set_twice() {
         "Stat = STAT_AOK; Stat = STAT_HLT; pc = 0;
          ");
     assert!(message.contains("Wire 'Stat' assigned"));
+}
+
+#[test]
+fn error_register_in_set_twice() {
+    init_logger();
+    let message = get_errors_for(
+        "register xY { foo : 1 = 0; } x_foo = 1; x_foo = 2;
+         ");
+    assert!(message.contains("Wire 'x_foo' assigned"));
 }
