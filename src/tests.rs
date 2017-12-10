@@ -151,6 +151,11 @@ fn parse_unops() {
         SpannedExpr::new((0, 3), Expr::UnOp(UnOpCode::Complement,
             SpannedExpr::new((1, 3), Expr::Constant(WireValue::from_decimal("42")))))
     );
+    assert_eq!(
+        parse_Expr_str(&mut errors, "+42").unwrap(),
+        SpannedExpr::new((0, 3), Expr::UnOp(UnOpCode::Plus,
+            SpannedExpr::new((1, 3), Expr::Constant(WireValue::from_decimal("42")))))
+    );
     assert_eq!(errors.len(), 0);
 }
 

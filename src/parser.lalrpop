@@ -234,6 +234,7 @@ ExprAddSub = BinTier<BinOpAddSub, ExprMulDiv>;
 ExprMulDiv = BinTier<BinOpMulDiv, Term>;
 
 UnOp : UnOpCode = {
+    "+" => UnOpCode::Plus,
     "-" => UnOpCode::Negate,
     "~" => UnOpCode::Complement,
     "!" => UnOpCode::Not,

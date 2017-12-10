@@ -332,6 +332,7 @@ impl BinOpCode {
 
 #[derive(Debug,Eq,PartialEq,Copy,Clone)]
 pub enum UnOpCode {
+    Plus,
     Negate,
     Complement,
     Not,
@@ -340,6 +341,7 @@ pub enum UnOpCode {
 impl UnOpCode {
     fn apply(self, value: WireValue) -> Result<WireValue, Error> {
         let new_value = match self {
+            UnOpCode::Plus => value.bits,
             UnOpCode::Negate => !value.bits + u128::new(1),
             UnOpCode::Complement => !value.bits,
             UnOpCode::Not => if value.bits != u128::new(0) { u128::new(0) } else { u128::new(1) },
