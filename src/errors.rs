@@ -44,6 +44,11 @@ pub enum Error {
         register_span: Span,
         assign_span: Span,
     },
+    DoubleDeclaredRegisterOutWire {
+        name: String,
+        old_span: Span,
+        new_span: Span
+    },
     DoubleAssignedFixedOutWire(String, Span),
     RedeclaredBuiltinWire(String, Span),
     PartialFixedInput {
@@ -321,6 +326,12 @@ impl Error {
                 error_continue(output, &format!("but wire '{}' is assigned directly here:", name))?;
                 write!(output, "{}", contents.show_region(assign_span.0, assign_span.1))?;
             },
+            Error::DoubleDeclaredRegisterOutWire { ref name, ref old_span, ref new_span } => {
+                error(output, &format!("Wire '{}' used by register declared here:", name))?;
+                write!(output, "{}", contents.show_region(old_span.0, old_span.1))?;
+                error_continue(output, &format!("but would also be used by register declared here:"))?;
+                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
+            },
             Error::RedeclaredBuiltinWire(ref name, ref new_span) => {
                 error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
@@ -525,6 +536,7 @@ impl error::Error for Error {
             Error::DoubleAssignedWire(_,_,_) => "multiply assigned wire found",
             Error::DoubleAssignedFixedOutWire(_,_) => "wire assigned by fixed functionality also assigned manually",
             Error::DoubleAssignedRegisterWire {..} => "wire assigned by register also assigned manually",
+            Error::DoubleDeclaredRegisterOutWire {..} => "multiply declared register out wire found",
             Error::RedeclaredWire(_,_,_) => "multiply defined wire found",
             Error::RedeclaredBuiltinWire(_,_) => "redefined wire from fixed functionality",
             Error::PartialFixedInput {..} => "part of fixed functionality set, but not all",

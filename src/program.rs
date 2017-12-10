@@ -645,6 +645,7 @@ impl Program {
         // Step 3: resolve register banks
         let mut register_banks = Vec::new();
         let mut errors = Vec::new();
+        let mut seen_registers : HashMap<String, Span> = HashMap::new();
         for decl in &register_banks_raw {
             // FIXME: should really iterate over graphemes
             let name_chars: Vec<char> = decl.name.chars().collect();
@@ -697,6 +698,16 @@ impl Program {
                         assign_span: assign_spans.get(out_name.as_str()).unwrap().clone(),
                         register_span: register.span.clone(),
                     });
+                }
+                if seen_registers.contains_key(&out_name) {
+                    found_error = true;
+                    errors.push(Error::DoubleDeclaredRegisterOutWire {
+                        name: String::from(out_name.clone()),
+                        old_span: seen_registers.get(&out_name).unwrap().clone(),
+                        new_span: register.span.clone(),
+                    })
+                } else {
+                    seen_registers.insert(out_name.clone(), register.span.clone());
                 }
 
                 if found_error {

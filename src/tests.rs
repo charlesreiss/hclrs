@@ -1490,3 +1490,17 @@ fn error_register_in_set_twice() {
          ");
     assert!(message.contains("Wire 'x_foo' assigned"));
 }
+
+#[test]
+fn error_duplicate_register_out() {
+    init_logger();
+    let message = get_errors_for(
+        "register xY { foo : 1 = 0; }
+         register zY { foo : 1 = 0; }
+         x_foo = 1; z_foo = 2;
+         Stat = STAT_AOK;
+         pc = 0;
+         ");
+    debug!("message is {}", message);
+    assert!(message.contains("'Y_foo'"));
+}
