@@ -474,7 +474,7 @@ fn expect_execute(program: &Program, yo_path: &Path, expect_output_path: &Path) 
     let mut yo_reader = BufReader::new(File::open(yo_path)?);
     running_program.load_memory_y86(&mut yo_reader)?;
     // FIXME: control with env var
-    ///running_program.run_with_trace(&mut stderr()).unwrap();
+    //running_program.run_with_trace(&mut stderr()).unwrap();
     running_program.run()?;
     let result = running_program.dump_y86_str(false);
     let mut expect_output_reader = BufReader::new(File::open(expect_output_path)?);
@@ -1468,7 +1468,6 @@ fn error_register_in_not_set() {
          "
     );
     debug!("message is {}", message);
-    // FIXME: error could be better
     assert!(message.contains("input to the register defined here"));
     assert!(!message.contains("fixed functionality"));
 }
