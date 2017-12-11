@@ -298,6 +298,17 @@ Assignment : Assignment = {
         }
         Assignment { span: (start,end), names: names, value: v }
     },
+    <full_start:@R> <name:IDWithSpan> <start_bracket:@R> "[" <end_bracket:@L> <e:Semicolons1<MuxOption>> "]" <full_end:@L> => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::MissingAssignmentMux((full_start,start_bracket)) },
+            dropped_tokens: vec!(),
+        });
+        Assignment {
+            span: (full_start, full_end),
+            names: vec!((String::from(name.0), name.1)),
+            value: SpannedExpr::new((start_bracket, full_end), Expr::Mux(e)),
+        }
+    }
 };
 
 RegisterDecl : RegisterDecl = {
@@ -348,7 +359,7 @@ StatementNeedSemi : Statement = {
     Assignments => Statement::Assignments(<>),
     WireDecls => Statement::WireDecls(<>),
     ConstDecls => Statement::ConstDecls(<>),
-    <e:Expr> => {
+    <e:SimpleTerm> => {
         if errors.len() == 0 {
             /* Assume we'd give a duplicate error if there are already other pending errors */
             errors.push(ErrorRecovery {

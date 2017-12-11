@@ -72,6 +72,7 @@ pub enum Error {
     MissingWireWidth(Span),
     MissingRegisterWidth(Span),
     AddedConstWidth(Span),
+    MissingAssignmentMux(Span),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -399,6 +400,10 @@ impl Error {
                 error(output, "Constant declaration has unsupported explicit width:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
+            Error::MissingAssignmentMux(ref span) => {
+                error(output, "Syntax error; probably missing '=' after here:")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            },
             Error::InvalidConstant(ref span) => {
                 error(output, "Constant value is out of range:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -553,7 +558,8 @@ impl error::Error for Error {
             Error::ExpectedStatementFoundExpr(_) => "statement expected; found expression",
             Error::MissingWireWidth(_) => "wire declaration missing width",
             Error::MissingRegisterWidth(_) =>"register declaration missing width",
-            Error::AddedConstWidth(_) =>"constnat declaration has unsupported width",
+            Error::AddedConstWidth(_) =>"constant declaration has unsupported width",
+            Error::MissingAssignmentMux(_) => "missing '=' before Mux, probably",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",

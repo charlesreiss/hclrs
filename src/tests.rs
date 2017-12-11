@@ -1503,3 +1503,19 @@ fn error_duplicate_register_out() {
     debug!("message is {}", message);
     assert!(message.contains("'Y_foo'"));
 }
+
+#[test]
+fn error_missing_equals_on_mux() {
+    init_logger();
+    let message = get_errors_for(
+        "wire foo: 32;
+         foo [
+            pc == 0: 1;
+            1: 42;
+         ];
+         Stat = STAT_AOK;
+         pc = 0;
+         ");
+    debug!("message is {}", message);
+    assert!(message.contains("missing '='"));
+}
