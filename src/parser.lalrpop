@@ -331,6 +331,15 @@ RegisterDecl : RegisterDecl = {
 		       default: SpannedExpr::new((start,end), Expr::Error),
                        span: (start,end), }
     },
+    <start:@R> "wire" <end_wire:@L> <n:IDWithSpan> (":" <WidthConstant>)? "=" <e:Expr> <end:@L> => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::RegisterDeclaredWithWire((start, end_wire)) },
+            dropped_tokens: vec!(),
+        });
+        RegisterDecl { name: String::from("<error>"), width: WireWidth::from(0),
+		       default: SpannedExpr::new((start,end), Expr::Error),
+                       span: (start,end), }
+    },
 };
 
 RegisterBankDecl : RegisterBankDecl = {

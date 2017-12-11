@@ -1519,3 +1519,17 @@ fn error_missing_equals_on_mux() {
     debug!("message is {}", message);
     assert!(message.contains("missing '='"));
 }
+
+#[test]
+fn error_wire_declared_in_register_bank() {
+    init_logger();
+    let message = get_errors_for(
+        "register xY {
+            wire foo: 32 = 0;
+         }
+         Stat = STAT_AOK;
+         pc = 0;
+         ");
+    debug!("message is {}", message);
+    assert!(message.contains("'wire' to declare"));
+}

@@ -73,6 +73,7 @@ pub enum Error {
     MissingRegisterWidth(Span),
     AddedConstWidth(Span),
     MissingAssignmentMux(Span),
+    RegisterDeclaredWithWire(Span),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -404,6 +405,11 @@ impl Error {
                 error(output, "Syntax error; probably missing '=' after here:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
+            Error::RegisterDeclaredWithWire(ref span) => {
+                error(output, "Syntax error; attempting to use 'wire' to declare registers in a register bank?:")?;
+                error_continue(output, "(correct syntax is like 'register xY { register_name : width = default; }')")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            }
             Error::InvalidConstant(ref span) => {
                 error(output, "Constant value is out of range:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -560,6 +566,7 @@ impl error::Error for Error {
             Error::MissingRegisterWidth(_) =>"register declaration missing width",
             Error::AddedConstWidth(_) =>"constant declaration has unsupported width",
             Error::MissingAssignmentMux(_) => "missing '=' before Mux, probably",
+            Error::RegisterDeclaredWithWire(_) => "register declared with 'wire', probably",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",
