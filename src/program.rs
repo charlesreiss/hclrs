@@ -7,7 +7,9 @@ use std::collections::hash_set::HashSet;
 use std::collections::hash_map::HashMap;
 use std::collections::btree_map::BTreeMap;
 use std::collections::VecDeque;
-use std::fmt::Debug;
+use std::cmp::max;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use std::io::{BufRead, Write, sink};
 
@@ -994,6 +996,77 @@ impl Memory {
     }
 }
 
+pub struct RunOptions {
+    trace_assignments: bool,
+    trace_fixed_functionality: bool,
+    show_wire_values: bool,
+    show_register_banks: bool,
+    show_registers_and_memory: bool,
+    show_disassembly: bool,
+    timeout: u32,
+    prompt: Option<Box<Fn() -> ()>>
+}
+
+impl Debug for RunOptions {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(f, "RunOptions {{ trace_assignments: {:?}, trace_fixed_functionality: {:?}, show_wire_values: {:?}, show_register_banks: {:?}, show_registers_and_memory: {:?}, show_disassembly: {:?}, timeout: {:?}, .. }}",
+            self.trace_assignments,
+            self.trace_fixed_functionality,
+            self.show_wire_values,
+            self.show_register_banks,
+            self.show_registers_and_memory,
+            self.show_disassembly,
+            self.timeout
+        )
+    }
+}
+
+impl Default for RunOptions {
+    fn default() -> RunOptions {
+        RunOptions {
+            trace_assignments: false,
+            trace_fixed_functionality: false,
+            show_wire_values: false,
+            show_register_banks: true,
+            show_registers_and_memory: true,
+            show_disassembly: true,
+            timeout: 9999,
+            prompt: None,
+        }
+    }
+}
+
+impl RunOptions {
+    pub fn set_quiet(&mut self) {
+        self.show_wire_values = false;
+        self.show_register_banks = false;
+        self.show_registers_and_memory = false;
+        self.show_disassembly = false;
+    }
+
+    pub fn set_test(&mut self) {
+        self.show_register_banks = false;
+    }
+
+    pub fn set_debug(&mut self) {
+        self.trace_fixed_functionality = true;
+        self.show_wire_values = true;
+    }
+
+    pub fn set_trace(&mut self) {
+        self.trace_fixed_functionality = true;
+        self.trace_assignments = true;
+    }
+
+    pub fn set_timeout(&mut self, new_timeout: u32) {
+        self.timeout = new_timeout;
+    }
+
+    pub fn set_prompt(&mut self, new_prompt: Box<Fn() -> ()>) {
+        self.prompt = Some(new_prompt);
+    }
+}
+
 #[derive(Debug)]
 pub struct RunningProgram {
     program: Program,
@@ -1003,8 +1076,9 @@ pub struct RunningProgram {
     registers: Vec<u64>,
     zero_register: usize,
     last_status: Option<u8>,
-    timeout: u32,
+    options: RunOptions,
 }
+
 
 const Y86_STATUSES: [&'static str; 6] = [
     "0 (Bubble)",
@@ -1032,38 +1106,28 @@ impl RunningProgram {
             registers: registers,
             zero_register: zero_register,
             last_status: None,
-            timeout: 9999,
+            options: RunOptions::default(),
         }
     }
 
-    pub fn set_timeout(&mut self, new_timeout: u32) {
-        self.timeout = new_timeout;
+    pub fn set_options(&mut self, options: RunOptions) {
+        self.options = options;
     }
 
-    pub fn run(&mut self) -> Result<(), Error> {
-        self.run_with_trace(&mut sink(), &mut sink(), &mut sink(), false)
-    }
-
-    pub fn run_with_trace_and_prompt<W1: Write, W2: Write, W3: Write, F>(&mut self,
-                step_out: &mut W1, trace_out: &mut W2,
-                disasm_out: &mut W3,
-                dump_registers: bool,
-                prompt: F) -> Result<(), Error>
-            where F: Fn() -> () {
+    pub fn run<W: Write>(&mut self, out: &mut W) -> Result<(), Error> {
         while !self.done() {
-            self.dump_y86(step_out, dump_registers)?;
-            self.step_with_trace(trace_out, disasm_out)?;
-            prompt();
+            if self.options.show_registers_and_memory {
+                self.dump_y86(out)?;
+            }
+            self.step()?;
+            match self.options.prompt {
+                Some(ref prompt) => prompt(),
+                None => {}
+            }
         }
         Ok(())
     }
 
-    pub fn run_with_trace<W1: Write, W2: Write, W3: Write>(&mut self,
-                step_out: &mut W1, trace_out: &mut W2,
-                disasm_out: &mut W3,
-                dump_registers: bool) -> Result<(), Error> {
-        self.run_with_trace_and_prompt(step_out, trace_out, disasm_out, dump_registers, || {})
-    }
 
     pub fn load_memory_y86<R: BufRead>(&mut self, reader: &mut R) -> Result<(), Error> {
         self.memory.load_from_y86(reader)
@@ -1082,13 +1146,40 @@ impl RunningProgram {
         return name_register(i);
     }
 
-    pub fn step_with_trace<W1: Write, W2: Write>(&mut self, trace_out: &mut W1, disasm_out: &mut W2) -> Result<(), Error> {
+    fn dump_values<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+        let mut keys: Vec<String> = self.values.keys().cloned().collect();
+        keys.sort();
+        let mut max_length = 4;
+        for key in &keys {
+            if self.program.constants.contains_key(key) {
+                continue
+            }
+            max_length = max(key.len(), max_length);
+        }
+        writeln!(w, "{:width$} {}", "Wire", "Value", width=max_length)?;
+        for key in &keys {
+            if self.program.constants.contains_key(key) {
+                continue
+            }
+            writeln!(w, "{:width$} {}", key, self.values.get(key).unwrap(), width=max_length)?
+        }
+
+        Ok(())
+    }
+
+    pub fn step(&mut self) -> Result<(), Error> {
+        self.step_with_output(&mut sink())
+    }
+
+    pub fn step_with_output<W: Write>(&mut self, out: &mut W) -> Result<(), Error> {
         for action in &self.program.actions {
             debug!("processing action {:?}", action);
             match action {
                &Action::Assign(ref name, ref expr, ref width) => {
                   let result = expr.evaluate(&self.values)?.as_width(*width);
-                  writeln!(trace_out, "{} set to 0x{:x}", name, result.bits)?;
+                  if self.options.trace_assignments {
+                      writeln!(out, "{} set to 0x{:x}", name, result.bits)?;
+                  }
                   debug!("computed value {:?}", result);
                   let mut inserted = false;
                   if let Some(value) = self.values.get_mut(name) {
@@ -1107,22 +1198,28 @@ impl RunningProgram {
                    if do_read {
                        let address_value = *self.values.get(address).unwrap();
                        let value = self.memory.read(address_value.bits.low64(), *bytes);
-                       writeln!(trace_out,
-                                "{} set to 0x{:x} (reading {} bytes from memory at {}=0x{:x})",
-                                out_port, value, bytes, address, address_value.bits)?;
+                       if self.options.trace_fixed_functionality {
+                           writeln!(out,
+                                    "{} set to 0x{:x} (reading {} bytes from memory at {}=0x{:x})",
+                                    out_port, value, bytes, address, address_value.bits)?;
+                       }
                        self.values.insert(out_port.clone(), value);
                        if *is_instruction {
-                           write!(disasm_out, "pc = 0x{:x}; loaded [", address_value)?;
-                           let (num_bytes, instruction) = disassemble_to_string(value.bits);
-                           for i in 0..num_bytes {
-                               let cur_byte = ((value.bits >> (8 * i)) as u128).low64() & 0xFF;
-                               write!(disasm_out, "{:02x} ", cur_byte)?;
+                           if self.options.show_disassembly {
+                               write!(out, "pc = 0x{:x}; loaded [", address_value)?;
+                               let (num_bytes, instruction) = disassemble_to_string(value.bits);
+                               for i in 0..num_bytes {
+                                   let cur_byte = ((value.bits >> (8 * i)) as u128).low64() & 0xFF;
+                                   write!(out, "{:02x} ", cur_byte)?;
+                               }
+                               writeln!(out, ": {}]", instruction)?;
                            }
-                           writeln!(disasm_out, ": {}]", instruction)?;
                        }
                    } else {
-                       writeln!(trace_out,
-                                "not reading from memory since {} is 0", is_read.clone().unwrap())?;
+                       if self.options.trace_fixed_functionality {
+                           writeln!(out,
+                                    "not reading from memory since {} is 0", is_read.clone().unwrap())?;
+                       }
                        // keep the result well-defined
                        let zero = WireValue::new(u128::new(0)).as_width(WireWidth::from((bytes * 8) as usize));
                        self.values.insert(out_port.clone(), zero);
@@ -1136,12 +1233,14 @@ impl RunningProgram {
                    if do_write {
                        let address_value = self.values.get(address).unwrap();
                        let input_value = self.values.get(in_port).unwrap();
-                       writeln!(trace_out,
-                                "writing {}={} to memory at {}=0x{:x}",
-                                in_port, input_value, address, address_value)?;
+                       if self.options.trace_fixed_functionality {
+                           writeln!(out,
+                                    "writing {}={} to memory at {}=0x{:x}",
+                                    in_port, input_value, address, address_value)?;
+                       }
                        self.memory.write(address_value.bits.low64(), input_value.bits, *bytes);
-                   } else {
-                       writeln!(trace_out,
+                   } else if self.options.trace_fixed_functionality {
+                       writeln!(out,
                                 "not writing to memory since {} is 0", is_write.clone().unwrap())?;
                    }
                },
@@ -1155,10 +1254,12 @@ impl RunningProgram {
                        self.values.insert(out_port.clone(),
                            WireValue { bits: u128::new(self.registers[number]), width: WireWidth::Bits(64) }
                        );
-                       writeln!(trace_out,
-                                "set {} to 0x{:x} from register {}={} ({})",
-                                out_port, self.registers[number],
-                                number_wire, number, self.name_register(number))?;
+                       if self.options.trace_fixed_functionality {
+                           writeln!(out,
+                                    "set {} to 0x{:x} from register {}={} ({})",
+                                    out_port, self.registers[number],
+                                    number_wire, number, self.name_register(number))?;
+                       }
                    } else {
                        // should not be reached, but make sure behavior is consistent in case
                        self.values.insert(out_port.clone(), WireValue {
@@ -1171,13 +1272,19 @@ impl RunningProgram {
                    let number = self.values.get(number_wire).unwrap().bits.low64() as usize;
                    if number < self.registers.len() && number != self.zero_register {
                        self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
-                       writeln!(trace_out,
-                                "writing {}=0x{:x} into register {}={} ({})",
-                                in_port, self.registers[number],
-                                number_wire, number, self.name_register(number))?;
+                       if self.options.trace_fixed_functionality {
+                           writeln!(out,
+                                    "writing {}=0x{:x} into register {}={} ({})",
+                                    in_port, self.registers[number],
+                                    number_wire, number, self.name_register(number))?;
+                       }
                    }
                },
             }
+        }
+        // TODO: dump wire values here
+        if self.options.show_wire_values {
+            self.dump_values(out)?;
         }
         self.program.process_register_banks(&mut self.values)?;
         self.cycle += 1;
@@ -1189,10 +1296,6 @@ impl RunningProgram {
 
     pub fn values(&self) -> &WireValues { &self.values }
 
-    pub fn step(&mut self) -> Result<(), Error> {
-        self.step_with_trace(&mut sink(), &mut sink())
-    }
-
     pub fn status_or_default(&self, default: u8) -> u8 {
         let value = self.values.get("Stat").unwrap_or(&WireValue::from_u64(default as u64)).bits;
         value.low64() as u8
@@ -1202,7 +1305,7 @@ impl RunningProgram {
     pub fn done(&self) -> bool {
         (self.status_or_default(1) != 1 &&
          self.status_or_default(1) != 0
-         ) || self.cycle > self.timeout
+         ) || self.cycle > self.options.timeout
     }
 
     pub fn halted(&self) -> bool {
@@ -1210,7 +1313,7 @@ impl RunningProgram {
     }
 
     pub fn timed_out(&self) -> bool {
-        self.cycle >= self.timeout
+        self.cycle >= self.options.timeout
     }
 
     fn dump_program_registers_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
@@ -1305,7 +1408,7 @@ impl RunningProgram {
         }
     }
 
-    pub fn dump_y86<W: Write>(&self, result: &mut W, include_register_banks: bool) -> Result<(), Error> {
+    pub fn dump_y86<W: Write>(&self, result: &mut W) -> Result<(), Error> {
         if self.halted() {
             writeln!(result,
                 "+----------------------- halted in state: ------------------------------+"
@@ -1326,7 +1429,7 @@ impl RunningProgram {
             )?;
         }
         self.dump_program_registers_y86(result)?;
-        if include_register_banks {
+        if self.options.show_register_banks {
             self.dump_custom_registers_y86(result)?;
         }
         self.memory.dump_memory_y86(result)?;
@@ -1352,9 +1455,9 @@ impl RunningProgram {
         Ok(())
     }
 
-    pub fn dump_y86_str(&self, include_register_banks: bool) -> String {
+    pub fn dump_y86_str(&self) -> String {
         let mut result: Vec<u8> = Vec::new();
-        self.dump_y86(&mut result, include_register_banks).expect("unexpected error while dumping state");
+        self.dump_y86(&mut result).expect("unexpected error while dumping state");
         String::from_utf8_lossy(result.as_slice()).into_owned()
     }
 }

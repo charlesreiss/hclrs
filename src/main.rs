@@ -1,7 +1,7 @@
 extern crate env_logger;
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, Write, stdin, stdout, stderr, sink};
+use std::io::{BufReader, Write, stdin, stdout, stderr};
 use std::path::Path;
 use std::process;
 
@@ -34,19 +34,13 @@ fn press_enter() {
     stdin().read_line(&mut input).unwrap();
 }
 
-fn run_y86<W1: Write, W2: Write, W3: Write>(mut running_program: RunningProgram, yo_path: &Path,
-           trace_out: &mut W1, step_out: &mut W2,
-           disasm_out: &mut W3,  dump_registers: bool, timeout: u32,
-           interactive: bool) -> Result<(), Error> {
+fn run_y86<W: Write>(mut running_program: RunningProgram, yo_path: &Path,
+           run_options: RunOptions, out: &mut W) -> Result<(), Error> {
     let mut yo_reader = BufReader::new(File::open(yo_path)?);
-    running_program.set_timeout(timeout);
     running_program.load_memory_y86(&mut yo_reader)?;
-    if interactive {
-        running_program.run_with_trace_and_prompt(step_out, trace_out, disasm_out, dump_registers, press_enter)?;
-    } else {
-        running_program.run_with_trace(step_out, trace_out, disasm_out, dump_registers)?;
-    }
-    print!("{}", running_program.dump_y86_str(dump_registers));
+    running_program.set_options(run_options);
+    running_program.run(out)?;
+    print!("{}", running_program.dump_y86_str());
     Ok(())
 }
 
@@ -64,12 +58,14 @@ fn main_real() -> Result<bool, Error> {
     let args: Vec<String> = env::args().collect();
     let program_name = args[0].clone();
     let mut opts = Options::new();
+    let mut run_options = RunOptions::default();
     opts.optflag("c", "check", "check syntax only");
     opts.optflag("d", "debug", "output traces of all assignments for debugging");
     opts.optflag("q", "quiet", "only output state at the end");
     opts.optflag("t", "testing", "do not output custom register banks (for autograding)");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("i", "interactive", "prompt after each cycle");
+    opts.optflag("", "trace-assignments", "show assignments in the order they are simulated");
     opts.optflag("", "version", "print version number");
     let parsed_opts = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -86,12 +82,16 @@ fn main_real() -> Result<bool, Error> {
         println!("HCLRS version {}", VERSION);
         return Ok(true);
     }
-    let mut step_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
-    let mut disasm_out: Box<Write> = if parsed_opts.opt_present("q") { Box::new(sink()) } else { Box::new(stdout()) };
-    let mut trace_out: Box<Write> = if parsed_opts.opt_present("d") { Box::new(stdout()) } else { Box::new(sink()) };
-    let dump_registers = !parsed_opts.opt_present("t");
+    if parsed_opts.opt_present("q") {
+        run_options.set_quiet();
+    }
+    if parsed_opts.opt_present("d") {
+        run_options.set_debug();
+    }
+    if parsed_opts.opt_present("i") {
+        run_options.set_prompt(Box::new(press_enter));
+    }
     let check_only = parsed_opts.opt_present("c");
-    let interactive = parsed_opts.opt_present("i");
     let free_args = parsed_opts.free;
     if free_args.len() < 1 {
         print_usage(&program_name, opts);
@@ -139,8 +139,9 @@ fn main_real() -> Result<bool, Error> {
         } else {
             9999
         };
+    run_options.set_timeout(timeout);
     let yo_path = Path::new(yo_filename);
-    match run_y86(running_program, yo_path, &mut trace_out, &mut step_out, &mut disasm_out, dump_registers, timeout, interactive) {
+    match run_y86(running_program, yo_path, run_options, &mut stdout()) {
         Err(e) => {
             e.format_for_contents(&mut stderr(), &file_contents)?;
             return Ok(false);

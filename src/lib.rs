@@ -22,7 +22,7 @@ use parser::parse_Statements;
 use std::panic::catch_unwind;
 
 pub use errors::Error;
-pub use program::{Program, RunningProgram};
+pub use program::{Program, RunningProgram, RunOptions};
 pub use io::FileContents;
 
 pub fn read_y86_hcl(path: &Path) -> Result<FileContents, Error> {
