@@ -12,6 +12,9 @@ use hclrs::*;
 
 use getopts::Options;
 
+#[macro_use]
+extern crate log;
+
 fn main() {
     env_logger::init().unwrap();
     let okay = main_real().unwrap();
@@ -60,7 +63,7 @@ fn main_real() -> Result<bool, Error> {
     let mut opts = Options::new();
     let mut run_options = RunOptions::default();
     opts.optflag("c", "check", "check syntax only");
-    opts.optflag("d", "debug", "output traces of all assignments for debugging");
+    opts.optflag("d", "debug", "output wire values after each cycle and other debug output");
     opts.optflag("q", "quiet", "only output state at the end");
     opts.optflag("t", "testing", "do not output custom register banks (for autograding)");
     opts.optflag("h", "help", "print this help menu");
@@ -110,6 +113,7 @@ fn main_real() -> Result<bool, Error> {
         print_usage(&program_name, opts);
         return Ok(false);
     }
+    debug!("run_options = {:?}", run_options);
     let running_program =
         match parse_y86(&file_contents) {
             Err(e) => {

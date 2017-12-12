@@ -1000,7 +1000,7 @@ pub struct RunOptions {
     trace_assignments: bool,
     trace_fixed_functionality: bool,
     show_wire_values: bool,
-    show_register_banks: bool,
+    show_register_banks_with_registers: bool,
     show_registers_and_memory: bool,
     show_disassembly: bool,
     timeout: u32,
@@ -1009,11 +1009,11 @@ pub struct RunOptions {
 
 impl Debug for RunOptions {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        write!(f, "RunOptions {{ trace_assignments: {:?}, trace_fixed_functionality: {:?}, show_wire_values: {:?}, show_register_banks: {:?}, show_registers_and_memory: {:?}, show_disassembly: {:?}, timeout: {:?}, .. }}",
+        write!(f, "RunOptions {{ trace_assignments: {:?}, trace_fixed_functionality: {:?}, show_wire_values: {:?}, show_register_banks_with_registers: {:?}, show_registers_and_memory: {:?}, show_disassembly: {:?}, timeout: {:?}, .. }}",
             self.trace_assignments,
             self.trace_fixed_functionality,
             self.show_wire_values,
-            self.show_register_banks,
+            self.show_register_banks_with_registers,
             self.show_registers_and_memory,
             self.show_disassembly,
             self.timeout
@@ -1027,7 +1027,7 @@ impl Default for RunOptions {
             trace_assignments: false,
             trace_fixed_functionality: false,
             show_wire_values: false,
-            show_register_banks: true,
+            show_register_banks_with_registers: true,
             show_registers_and_memory: true,
             show_disassembly: true,
             timeout: 9999,
@@ -1039,13 +1039,12 @@ impl Default for RunOptions {
 impl RunOptions {
     pub fn set_quiet(&mut self) {
         self.show_wire_values = false;
-        self.show_register_banks = false;
         self.show_registers_and_memory = false;
         self.show_disassembly = false;
     }
 
     pub fn set_test(&mut self) {
-        self.show_register_banks = false;
+        self.show_register_banks_with_registers = false;
     }
 
     pub fn set_debug(&mut self) {
@@ -1119,7 +1118,7 @@ impl RunningProgram {
             if self.options.show_registers_and_memory {
                 self.dump_y86(out)?;
             }
-            self.step()?;
+            self.step_with_output(out)?;
             match self.options.prompt {
                 Some(ref prompt) => prompt(),
                 None => {}
@@ -1156,12 +1155,13 @@ impl RunningProgram {
             }
             max_length = max(key.len(), max_length);
         }
+        writeln!(w, "Values of wires:")?;
         writeln!(w, "{:width$} {}", "Wire", "Value", width=max_length)?;
         for key in &keys {
             if self.program.constants.contains_key(key) {
                 continue
             }
-            writeln!(w, "{:width$} {}", key, self.values.get(key).unwrap(), width=max_length)?
+            writeln!(w, "{:width$} {:#x}", key, self.values.get(key).unwrap().bits, width=max_length)?
         }
 
         Ok(())
@@ -1429,7 +1429,7 @@ impl RunningProgram {
             )?;
         }
         self.dump_program_registers_y86(result)?;
-        if self.options.show_register_banks {
+        if self.options.show_register_banks_with_registers {
             self.dump_custom_registers_y86(result)?;
         }
         self.memory.dump_memory_y86(result)?;

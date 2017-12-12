@@ -1532,3 +1532,26 @@ fn error_wire_declared_in_register_bank() {
     debug!("message is {}", message);
     assert!(message.contains("'wire' to declare"));
 }
+
+#[test]
+fn debug_output() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "wire foo_bar_baz_quux : 32;
+        foo_bar_baz_quux = 0x42;
+        Stat = 0;
+        pc = 0;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options = RunOptions::default();
+    options.set_debug();
+    running_program.set_options(options);
+    let mut result: Vec<u8> = Vec::new();
+    running_program.step_with_output(&mut result).unwrap();
+    let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
+    debug!("result is {:?}", result_as_string);
+    assert!(result_as_string.contains("foo_bar_baz_quux 0x42"));
+}
+
