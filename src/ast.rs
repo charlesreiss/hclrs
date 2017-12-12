@@ -22,6 +22,8 @@ use errors::Error;
 const STRICT_WIDTHS_BINARY: bool = cfg!(feature="strict-wire-widths-binary");
 // *  require boolean arguments for &&, ||, etc.
 const STRICT_WIDTHS_BOOLEAN: bool = cfg!(feature="strict-boolean-ops");
+// *  require default options for MUXes
+const REQUIRE_MUX_DEFAULT: bool = cfg!(feature="require-mux-default");
 
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq,PartialOrd,Ord)]
@@ -402,50 +404,57 @@ pub enum Expr {
 pub type WireValues = HashMap<String, WireValue>;
 
 impl SpannedExpr {
-    pub fn width<'a>(&self, widths: &'a HashMap<&'a str, WireWidth>) -> Result<WireWidth, Error> {
+    pub fn get_width_and_check<'a>(&self, widths: &'a HashMap<&'a str, WireWidth>, constants: &WireValues) -> Result<WireWidth, Error> {
         match *self.expr {
             Expr::Constant(ref value) => Ok(value.width),
             Expr::BinOp(opcode, ref left, ref right) =>
                 match opcode.kind() {
                     BinOpKind::EqualWidth => {
-                        left.width(widths)?.combine_exprs(right.width(widths)?, left, right)
+                        left.get_width_and_check(widths, constants)?.combine_exprs(right.get_width_and_check(widths, constants)?, left, right)
                     },
                     BinOpKind::EqualWidthWeak => {
                         if STRICT_WIDTHS_BINARY {
-                            left.width(widths)?.combine_exprs(right.width(widths)?, left, right)
+                            left.get_width_and_check(widths, constants)?.combine_exprs(right.get_width_and_check(widths, constants)?, left, right)
                         } else {
-                            Ok((left.width(widths)?).max(right.width(widths)?))
+                            Ok((left.get_width_and_check(widths, constants)?).max(right.get_width_and_check(widths, constants)?))
                         }
                     },
                     BinOpKind::BooleanCombine => {
                         if STRICT_WIDTHS_BOOLEAN {
-                            if !left.width(widths)?.possibly_boolean() {
+                            if !left.get_width_and_check(widths, constants)?.possibly_boolean() {
                                 return Err(Error::NonBooleanWidth(left.clone()));
                             }
-                            if !right.width(widths)?.possibly_boolean() {
+                            if !right.get_width_and_check(widths, constants)?.possibly_boolean() {
                                 return Err(Error::NonBooleanWidth(right.clone()));
                             }
                         } else {
-                            left.width(widths)?;
-                            right.width(widths)?;
+                            left.get_width_and_check(widths, constants)?;
+                            right.get_width_and_check(widths, constants)?;
                         }
                         Ok(WireWidth::Bits(1))
                     },
                     BinOpKind::BooleanFromEqualWidth => {
-                        left.width(widths)?.combine_exprs(right.width(widths)?, left, right)?;
+                        left.get_width_and_check(widths, constants)?.combine_exprs(right.get_width_and_check(widths, constants)?, left, right)?;
                         Ok(WireWidth::Bits(1))
                     }
                 },
             Expr::Mux(ref options) => {
                 let mut maybe_width = Some(WireWidth::Unlimited);
                 let mut all_widths = Vec::new();
+                let mut seen_always_true = false;
                 for option in options {
-                    option.condition.width(widths)?;
-                    let option_width = option.value.width(widths)?;
+                    option.condition.get_width_and_check(widths, constants)?;
+                    if option.condition.always_true(&constants) {
+                        seen_always_true = true;
+                    }
+                    let option_width = option.value.get_width_and_check(widths, constants)?;
                     all_widths.push(option_width);
                     if let Some(cur_width) = maybe_width {
                         maybe_width = cur_width.combine(option_width);
                     }
+                }
+                if REQUIRE_MUX_DEFAULT && !seen_always_true {
+                    return Err(Error::NoMuxDefaultOption(self.clone()));
                 }
                 match maybe_width {
                     Some(width) => Ok(width),
@@ -453,10 +462,10 @@ impl SpannedExpr {
                 }
             },
             Expr::UnOp(UnOpCode::Not, ref covered) => {
-                covered.width(widths)?;
+                covered.get_width_and_check(widths, constants)?;
                 Ok(WireWidth::Bits(1))
             },
-            Expr::UnOp(_, ref covered) => covered.width(widths),
+            Expr::UnOp(_, ref covered) => covered.get_width_and_check(widths, constants),
             Expr::NamedWire(ref name) => match widths.get(name.as_str()) {
                 Some(ref width) => Ok(**width),
                 None => Err(Error::UndefinedWireRead(name.clone(), self.clone())),
@@ -465,7 +474,7 @@ impl SpannedExpr {
                 if low > high {
                     return Err(Error::MisorderedBitIndexes(self.clone()));
                 }
-                match from.width(widths)? {
+                match from.get_width_and_check(widths, constants)? {
                     WireWidth::Bits(inner_width) => {
                         if high > inner_width {
                             return Err(Error::InvalidBitIndex(self.clone(), high));
@@ -476,8 +485,8 @@ impl SpannedExpr {
                 Ok(WireWidth::Bits(high - low))
             }
             Expr::Concat(ref left, ref right) => {
-                if let WireWidth::Bits(left_width) = left.width(widths)? {
-                    if let WireWidth::Bits(right_width) = right.width(widths)? {
+                if let WireWidth::Bits(left_width) = left.get_width_and_check(widths, constants)? {
+                    if let WireWidth::Bits(right_width) = right.get_width_and_check(widths, constants)? {
                         if left_width + right_width <= 128 {
                             Ok(WireWidth::Bits(left_width + right_width))
                         } else {
@@ -491,10 +500,10 @@ impl SpannedExpr {
                 }
             },
             Expr::InSet(ref left, ref lst) => {
-                let left_width = left.width(widths)?;
+                let left_width = left.get_width_and_check(widths, constants)?;
                 let mut errors = Vec::new();
                 for item in lst {
-                    let item_width = item.width(widths)?;
+                    let item_width = item.get_width_and_check(widths, constants)?;
                     match left_width.combine(item_width) {
                         Some(_) => {},
                         None => {
@@ -575,6 +584,13 @@ impl SpannedExpr {
             }
             /* panic since we should report error at parse-time instead */
             Expr::Error => panic!("expression did not parse correctly"),
+        }
+    }
+
+    pub fn always_true<'a>(&self, values: &'a WireValues) -> bool {
+        match self.evaluate(values) {
+            Ok(value) => value.is_true(),
+            Err(_) => false,
         }
     }
 

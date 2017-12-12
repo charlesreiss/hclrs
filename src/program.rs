@@ -331,6 +331,7 @@ fn assignments_to_actions<'a>(
         fixed_functions: &'a Vec<FixedFunction>,
         wire_decl_spans: &'a HashMap<&'a str, Span>,
         assign_spans: &'a HashMap<&'a str, Span>,
+        constants: &'a WireValues,
     ) -> Result<Vec<Action>, Error> {
     let mut fixed_by_output = HashMap::new();
     let mut fixed_no_output = Vec::new();
@@ -444,7 +445,7 @@ fn assignments_to_actions<'a>(
                             assert!(covered.contains(&in_name));
                         }
                         if let Some(the_width) = widths.get(name) {
-                            the_width.combine_expr_and_wire(expr.width(widths)?, name, expr)?;
+                            the_width.combine_expr_and_wire(expr.get_width_and_check(widths, constants)?, name, expr)?;
                             result.push(Action::Assign(
                                 String::from(name),
                                 (*expr).clone(),
@@ -797,7 +798,8 @@ impl Program {
             //        can we be assured all errors that need that will be caught above?
             assignments_to_actions(&assignments, &wires,
                                    &known_values, &fixed_functions,
-                                   &wire_decl_spans, &assign_spans)?
+                                   &wire_decl_spans, &assign_spans,
+                                   &constants)?
         };
 
         Ok(Program {

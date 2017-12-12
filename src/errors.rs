@@ -74,6 +74,7 @@ pub enum Error {
     AddedConstWidth(Span),
     MissingAssignmentMux(Span),
     RegisterDeclaredWithWire(Span),
+    NoMuxDefaultOption(SpannedExpr),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -410,6 +411,10 @@ impl Error {
                 error_continue(output, "(correct syntax is like 'register xY { register_name : width = default; }')")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
             }
+            Error::NoMuxDefaultOption(ref expr) => {
+                error(output, "Mux (case expression) missing required default option (e.g. '1 : some_value;'):")?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
+            },
             Error::InvalidConstant(ref span) => {
                 error(output, "Constant value is out of range:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -567,6 +572,7 @@ impl error::Error for Error {
             Error::AddedConstWidth(_) =>"constant declaration has unsupported width",
             Error::MissingAssignmentMux(_) => "missing '=' before Mux, probably",
             Error::RegisterDeclaredWithWire(_) => "register declared with 'wire', probably",
+            Error::NoMuxDefaultOption(_) => "no default option for mux",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",

@@ -1555,3 +1555,19 @@ fn debug_output() {
     assert!(result_as_string.contains("foo_bar_baz_quux 0x42"));
 }
 
+#[test]
+#[cfg(feature="require-mux-default")]
+fn error_mux_default() {
+    init_logger();
+    let message = get_errors_for("
+    wire foo : 1;
+    foo = [
+        pc == 42 : 100;
+        pc > 42 : 99;
+    ];
+    Stat = 0;
+    pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("missing required default"));
+}
