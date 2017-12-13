@@ -675,7 +675,7 @@ Stat = STAT_AOK;
 pc = 0;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Undefined wire 'foo' assigned value:"));
+    assert!(message.contains("Undeclared wire 'foo' assigned value:"));
     assert!(message.contains("foo = 42;"));
 }
 
@@ -689,7 +689,7 @@ Stat = STAT_AOK;
 pc = 0;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Usage of undefined value 'bar' in expression:"));
+    assert!(message.contains("Usage of undeclared wire 'bar' in expression:"));
     assert!(message.contains("bar + 42"));
 }
 

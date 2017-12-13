@@ -31,8 +31,8 @@ pub enum Error {
         register_name: String,
     },
     RuntimeMismatchedWidths(),
-    UndefinedWireAssigned(String, Span),
-    UndefinedWireRead(String, SpannedExpr),
+    UndefinedWireAssigned { name: String, span: Span, close_name: Option<String> },
+    UndefinedWireRead { name: String, expr: SpannedExpr, close_name: Option<String> },
     NonConstantWireRead(String, SpannedExpr),
     UnsetWire(String, Span),
     UnsetBuiltinWire(String),
@@ -269,19 +269,42 @@ impl Error {
             Error::RuntimeMismatchedWidths() => {
                 error(output, &format!("Unexpected wire width disagreement."))?;
             },
-            Error::UndefinedWireAssigned(ref name, ref span) => {
+            Error::UndefinedWireAssigned { ref name, ref span, ref close_name } => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
-                            "Undefined wire '{}' assigned value:",
+                            "Undeclared wire '{}' assigned value:",
                             name))?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
+                match *close_name {
+                    Some(ref other_name) => {
+                        error_continue(output, &format!("(Did you mean '{}'?)", other_name))?;
+                    },
+                    None => {
+                        if name.chars().count() > 2 && name.chars().nth(1) == Some('_') {
+                            error_continue(output, &format!("(Missing register declaration?)"))?;
+                        } else {
+                            error_continue(output, &format!("(Did you mean to declare it with 'wire {}'?)", name))?;
+                        }
+                    },
+                }
             },
-            Error::UndefinedWireRead(ref name, ref expr) => {
+            Error::UndefinedWireRead { ref name, ref expr, ref close_name } => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
-                            "Usage of undefined value '{}' in expression:",
+                            "Usage of undeclared wire '{}' in expression:",
                             name))?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
+                match *close_name {
+                    Some(ref other_name) =>
+                        error_continue(output, &format!("(Did you mean '{}'?)", other_name))?,
+                    None => {
+                        if name.chars().count() > 2 && name.chars().nth(1) == Some('_') {
+                            error_continue(output, &format!("(Missing register declaration?)"))?;
+                        } else {
+                            error_continue(output, &format!("(Did you mean to declare it with 'wire {}'?)", name))?;
+                        }
+                    },
+                }
             },
             Error::NonConstantWireRead(ref name, ref expr) => {
                 // TODO: suggestions for wire meant?
@@ -543,8 +566,8 @@ impl error::Error for Error {
             Error::MismatchedRegisterDefaultWidths {..} => "mismatched width in default value for register",
             Error::DuplicateRegister {..} => "duplicate register in register bank",
             Error::RuntimeMismatchedWidths() => "mismatched width detected while evaluating expression",
-            Error::UndefinedWireAssigned(_,_) => "undefined wire assigned",
-            Error::UndefinedWireRead(_,_) => "undefined wire read",
+            Error::UndefinedWireAssigned {..} => "undefined wire assigned",
+            Error::UndefinedWireRead {..} => "undefined wire read",
             Error::NonConstantWireRead(_,_) => "non-constant wire read",
             Error::UnsetWire(_,_) => "wire defined but never assigned",
             Error::UnsetBuiltinWire(_) => "builtin wire required but never assigned",

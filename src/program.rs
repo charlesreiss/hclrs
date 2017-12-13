@@ -452,8 +452,11 @@ fn assignments_to_actions<'a>(
                                 *the_width,
                             ));
                         } else {
-                            errors.push(Error::UndefinedWireAssigned(
-                                String::from(name), *assign_spans.get(name).unwrap()));
+                            errors.push(Error::UndefinedWireAssigned {
+                                name: String::from(name),
+                                span: *assign_spans.get(name).unwrap(),
+                                close_name: None, // FIXME
+                            });
                         }
                     },
                     None => {
@@ -632,7 +635,11 @@ impl Program {
                     }
                 } else if !is_constant {
                     for usage in expr.find_references(in_name).into_iter() {
-                        errors.push(Error::UndefinedWireRead(String::from(in_name), usage));
+                        errors.push(Error::UndefinedWireRead {
+                            name: String::from(in_name),
+                            expr: usage,
+                            close_name: None
+                        });
                     }
                 }
             }
