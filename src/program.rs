@@ -1,6 +1,6 @@
 use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr};
 use extprim::u128::u128;
-use errors::Error;
+use errors::{find_close_names_in, Error};
 use lexer::Span;
 use y86_disasm::{disassemble_to_string, name_register};
 use std::collections::hash_set::HashSet;
@@ -288,6 +288,7 @@ pub struct Program {
 
 
 fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<String, WireValue>, Error> {
+    debug!("resolve constants");
     let mut errors = Vec::new();
     let mut graph = Graph::new();
     for (name, expr) in exprs {
@@ -310,12 +311,15 @@ fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<Stri
                             value
                         );
                     },
-                    Err(e) => { errors.push(e); },
+                    Err(e) => { 
+                        errors.push(e);
+                    },
                 }
             }
             if errors.len() > 0 {
                 return Err(Error::MultipleErrors(errors));
             }
+            debug!("done resolve constants");
             Ok(results)
         },
         Err(cycle) => {
@@ -455,7 +459,9 @@ fn assignments_to_actions<'a>(
                             errors.push(Error::UndefinedWireAssigned {
                                 name: String::from(name),
                                 span: *assign_spans.get(name).unwrap(),
-                                close_name: None, // FIXME
+                                close_name: find_close_names_in(name, widths.keys().into_iter().cloned()).or_else(|| {
+                                    find_close_names_in(name, constants.keys().into_iter().map(|x| x.as_str()))
+                                })
                             });
                         }
                     },
@@ -638,7 +644,7 @@ impl Program {
                         errors.push(Error::UndefinedWireRead {
                             name: String::from(in_name),
                             expr: usage,
-                            close_name: None
+                            close_name: find_close_names_in(in_name, constants_raw.keys().into_iter().cloned()),
                         });
                     }
                 }

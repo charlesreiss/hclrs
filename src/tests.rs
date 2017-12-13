@@ -1571,3 +1571,53 @@ fn error_mux_default() {
     debug!("message is {:?}", message);
     assert!(message.contains("missing required default"));
 }
+
+#[test]
+fn suggest_capitalization_constant_decl() {
+    init_logger();
+    let message = get_errors_for("
+        const Bar = le;
+        Stat = 0;
+        pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("Did you mean 'LE'?"));
+}
+
+#[test]
+fn suggest_capitalization_register_default() {
+    init_logger();
+    let message = get_errors_for("
+        register xY {
+            foo : 4 = nop;
+        }
+        Stat = 0;
+        pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("Did you mean 'NOP'?"));
+}
+
+#[test]
+fn suggest_capitalization_assignment_constant() {
+    init_logger();
+    let message = get_errors_for("
+        Stat = stat_aok;
+        pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("Did you mean 'STAT_AOK'?"));
+}
+
+#[test]
+fn suggest_capitalization_assignment_wire() {
+    init_logger();
+    let message = get_errors_for("
+        wire Foo : 4;
+        Foo = 42;
+        Stat = FOO;
+        pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("Did you mean 'Foo'?"));
+}

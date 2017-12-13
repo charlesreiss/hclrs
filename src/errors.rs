@@ -1,3 +1,4 @@
+use std::ascii::AsciiExt;
 use std::collections::btree_map::BTreeMap;
 use std::collections::HashSet;
 use std::convert::From;
@@ -83,6 +84,19 @@ pub enum Error {
     MultipleErrors(Vec<Error>),
     IoError(io::Error),
     FmtError(fmt::Error),
+}
+
+/* utility function for producing error values */
+pub fn find_close_names_in<'a, Iter: IntoIterator<Item=&'a str>>(target_name: &'a str, possible_names: Iter) -> Option<String> {
+    debug!("find_close_names_in for {:?}", target_name);
+    let mut result = None;
+    for possible_name in possible_names {
+        debug!("> {:?}", possible_name);
+        if target_name.eq_ignore_ascii_case(possible_name) {
+            result = Some(String::from(possible_name));
+        }
+    }
+    return result;
 }
 
 fn error<W: Write>(output: &mut W, message: &str) -> Result<(), io::Error> {
@@ -283,7 +297,7 @@ impl Error {
                         if name.chars().count() > 2 && name.chars().nth(1) == Some('_') {
                             error_continue(output, &format!("(Missing register declaration?)"))?;
                         } else {
-                            error_continue(output, &format!("(Did you mean to declare it with 'wire {}'?)", name))?;
+                            error_continue(output, &format!("(Did you mean to declare it with 'wire {}' or 'const {}'?)", name, name))?;
                         }
                     },
                 }
@@ -295,13 +309,14 @@ impl Error {
                             name))?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
                 match *close_name {
-                    Some(ref other_name) =>
-                        error_continue(output, &format!("(Did you mean '{}'?)", other_name))?,
+                    Some(ref other_name) => {
+                        error_continue(output, &format!("(Did you mean '{}'?)", other_name))?;
+                    },
                     None => {
                         if name.chars().count() > 2 && name.chars().nth(1) == Some('_') {
                             error_continue(output, &format!("(Missing register declaration?)"))?;
                         } else {
-                            error_continue(output, &format!("(Did you mean to declare it with 'wire {}'?)", name))?;
+                            error_continue(output, &format!("(Did you mean to declare it with 'wire {}' or 'const {}'?)", name, name))?;
                         }
                     },
                 }
