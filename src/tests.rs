@@ -1621,3 +1621,17 @@ fn suggest_capitalization_assignment_wire() {
     debug!("message is {:?}", message);
     assert!(message.contains("Did you mean 'Foo'?"));
 }
+
+
+#[test]
+fn usage_and_assignment_of_undeclared_gives_both_errors() {
+    init_logger();
+    let message = get_errors_for("
+        Foo = 42;
+        Stat = STAT_AOK;
+        pc = Foo;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("assigned value"));
+    assert!(message.contains("in expression"));
+}

@@ -32,8 +32,8 @@ pub enum Error {
         register_name: String,
     },
     RuntimeMismatchedWidths(),
-    UndefinedWireAssigned { name: String, span: Span, close_name: Option<String> },
-    UndefinedWireRead { name: String, expr: SpannedExpr, close_name: Option<String> },
+    UndeclaredWireAssigned { name: String, span: Span, close_name: Option<String> },
+    UndeclaredWireRead { name: String, expr: SpannedExpr, close_name: Option<String> },
     NonConstantWireRead(String, SpannedExpr),
     UnsetWire(String, Span),
     UnsetBuiltinWire(String),
@@ -283,7 +283,7 @@ impl Error {
             Error::RuntimeMismatchedWidths() => {
                 error(output, &format!("Unexpected wire width disagreement."))?;
             },
-            Error::UndefinedWireAssigned { ref name, ref span, ref close_name } => {
+            Error::UndeclaredWireAssigned { ref name, ref span, ref close_name } => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
                             "Undeclared wire '{}' assigned value:",
@@ -302,7 +302,7 @@ impl Error {
                     },
                 }
             },
-            Error::UndefinedWireRead { ref name, ref expr, ref close_name } => {
+            Error::UndeclaredWireRead { ref name, ref expr, ref close_name } => {
                 // TODO: suggestions for wire meant?
                 error(output, &format!(
                             "Usage of undeclared wire '{}' in expression:",
@@ -581,8 +581,8 @@ impl error::Error for Error {
             Error::MismatchedRegisterDefaultWidths {..} => "mismatched width in default value for register",
             Error::DuplicateRegister {..} => "duplicate register in register bank",
             Error::RuntimeMismatchedWidths() => "mismatched width detected while evaluating expression",
-            Error::UndefinedWireAssigned {..} => "undefined wire assigned",
-            Error::UndefinedWireRead {..} => "undefined wire read",
+            Error::UndeclaredWireAssigned {..} => "undeclared wire assigned",
+            Error::UndeclaredWireRead {..} => "undeclared wire read",
             Error::NonConstantWireRead(_,_) => "non-constant wire read",
             Error::UnsetWire(_,_) => "wire defined but never assigned",
             Error::UnsetBuiltinWire(_) => "builtin wire required but never assigned",

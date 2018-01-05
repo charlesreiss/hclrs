@@ -449,14 +449,23 @@ fn assignments_to_actions<'a>(
                             assert!(covered.contains(&in_name));
                         }
                         if let Some(the_width) = widths.get(name) {
-                            the_width.combine_expr_and_wire(expr.get_width_and_check(widths, constants)?, name, expr)?;
-                            result.push(Action::Assign(
-                                String::from(name),
-                                (*expr).clone(),
-                                *the_width,
-                            ));
+                            match expr.get_width_and_check(widths, constants) {
+                                Ok(width) => {
+                                    if let Err(e) = the_width.combine_expr_and_wire(width, name, expr) {
+                                        errors.push(e);
+                                    }
+                                    result.push(Action::Assign(
+                                        String::from(name),
+                                        (*expr).clone(),
+                                        *the_width,
+                                    ));
+                                }
+                                Err(e) => {
+                                    errors.push(e);
+                                }
+                            }
                         } else {
-                            errors.push(Error::UndefinedWireAssigned {
+                            errors.push(Error::UndeclaredWireAssigned {
                                 name: String::from(name),
                                 span: *assign_spans.get(name).unwrap(),
                                 close_name: find_close_names_in(name, widths.keys().into_iter().cloned()).or_else(|| {
@@ -641,7 +650,7 @@ impl Program {
                     }
                 } else if !is_constant {
                     for usage in expr.find_references(in_name).into_iter() {
-                        errors.push(Error::UndefinedWireRead {
+                        errors.push(Error::UndeclaredWireRead {
                             name: String::from(in_name),
                             expr: usage,
                             close_name: find_close_names_in(in_name, constants_raw.keys().into_iter().cloned()),

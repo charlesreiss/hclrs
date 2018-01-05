@@ -468,7 +468,7 @@ impl SpannedExpr {
             Expr::UnOp(_, ref covered) => covered.get_width_and_check(widths, constants),
             Expr::NamedWire(ref name) => match widths.get(name.as_str()) {
                 Some(ref width) => Ok(**width),
-                None => Err(Error::UndefinedWireRead {
+                None => Err(Error::UndeclaredWireRead {
                     name: name.clone(), 
                     expr: self.clone(),
                     close_name: find_close_names_in(name, widths.keys().into_iter().cloned()),
@@ -554,7 +554,7 @@ impl SpannedExpr {
             },
             Expr::NamedWire(ref name) => match wires.get(name) {
                 Some(value) => Ok(*value),
-                None => Err(Error::UndefinedWireRead {
+                None => Err(Error::UndeclaredWireRead {
                     name: name.clone(),
                     expr: self.clone(),
                     close_name: find_close_names_in(name, wires.keys().into_iter().map(|x| x.as_str())),
