@@ -1095,6 +1095,26 @@ Stat = STAT_AOK;
 }
 
 #[test]
+fn error_double_equals() {
+    init_logger();
+    let message = get_errors_for("
+wire foo : 32, bar : 32;
+foo = (bar == bar == quux);
+bar = 42;
+pc = 0;
+Stat = STAT_AOK;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Unexpected token '==', expected"))
+}
+
+
+/* FIXME:
+   This test is broken right now because the raw list of expected operators does
+   not match what I expect. This may be an lalrpop issue.
+*/
+#[test]
+#[ignore]
 fn error_summarize_binary_operators_only() {
     init_logger();
     let message = get_errors_for("

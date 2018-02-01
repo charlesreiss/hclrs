@@ -141,6 +141,7 @@ fn format_token_list(tokens: &Vec<String>) -> String {
         // .. (wire concatenation, syntax requires parens)
         // []
         // ()
+    debug!("format_token_list({:?})", tokens);
     let mut token_set: HashSet<String> = HashSet::new();
     for token in tokens {
         token_set.insert(token.clone());
