@@ -3,7 +3,6 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, Write, stdin, stdout, stderr};
 use std::path::Path;
-use std::process;
 
 extern crate hclrs;
 extern crate getopts;

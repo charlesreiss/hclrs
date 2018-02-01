@@ -1,4 +1,3 @@
-use std::ascii::AsciiExt;
 use std::collections::btree_map::BTreeMap;
 use std::collections::HashSet;
 use std::convert::From;
