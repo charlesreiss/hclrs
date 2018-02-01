@@ -71,6 +71,7 @@ pub enum Error {
     LexicalError(Loc),
     InternalParserErrorNear(Span, String),
     MissingWireWidth(Span),
+    WireAssignedInDeclaration(Span),
     MissingRegisterWidth(Span),
     AddedConstWidth(Span),
     MissingAssignmentMux(Span),
@@ -432,6 +433,10 @@ impl Error {
                 error(output, "Wire declaration missing width:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
+            Error::WireAssignedInDeclaration(ref span) => {
+                error(output, "Wire declaration must be separate from assignment:")?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
+            },
             Error::MissingRegisterWidth(ref span) => {
                 error(output, "Register declaration missing width:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -606,6 +611,7 @@ impl error::Error for Error {
             Error::UnterminatedComment(_) => "unterminated /*-style comment",
             Error::ExpectedStatementFoundExpr(_) => "statement expected; found expression",
             Error::MissingWireWidth(_) => "wire declaration missing width",
+            Error::WireAssignedInDeclaration(_) => "wire assigned in declaration",
             Error::MissingRegisterWidth(_) =>"register declaration missing width",
             Error::AddedConstWidth(_) =>"constant declaration has unsupported width",
             Error::MissingAssignmentMux(_) => "missing '=' before Mux, probably",

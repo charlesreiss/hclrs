@@ -126,6 +126,24 @@ WireDecl : WireDecl = {
             dropped_tokens: vec!(),
         });
         WireDecl { name: String::from(name.0), width: WireWidth::Bits(0), span: (start, end) }
+    },
+    <start:@R> <name:IDWithSpan> "=" <end:@L> <e:Expr> => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::MissingWireWidth((start, end)) },
+            dropped_tokens: vec!(),
+        });
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::WireAssignedInDeclaration((start, end)) },
+            dropped_tokens: vec!(),
+        });
+        WireDecl { name: String::from(name.0), width: WireWidth::Bits(0), span: (start, end) }
+    },
+    <start:@R> <name:IDWithSpan> ":" <width:WidthConstant> "=" <end:@L> <e:Expr> => {
+        errors.push(ErrorRecovery {
+            error: ParseError::User { error: Error::WireAssignedInDeclaration((start, end)) },
+            dropped_tokens: vec!(),
+        });
+        WireDecl { name: String::from(name.0), width: width, span: (start, end) }
     }
 };
 

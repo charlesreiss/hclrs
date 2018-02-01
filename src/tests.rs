@@ -1225,24 +1225,23 @@ fn error_recovery_const_width() {
 #[test]
 fn error_recovery_wire_value_and_width() {
     init_logger();
-    // TODO: custom error for this case?
     let message = get_errors_for(
         "wire foo : 42 = 0;
          wire foo : * 42;"
     );
-    assert!(message.contains("Unexpected token '=', expected"));
+    assert!(message.contains("declaration must be separate from assignment"));
     assert!(message.contains("Unexpected token '*', expected"));
 }
 
 #[test]
 fn error_recovery_wire_value_no_width() {
     init_logger();
-    // TODO: custom error for this case?
     let message = get_errors_for(
         "wire foo = 0;
          wire foo : * 42;"
     );
     debug!("message is {}", message);
+    assert!(message.contains("declaration must be separate from assignment"));
     assert!(message.contains("missing width"));
     assert!(message.contains("Unexpected token '*', expected"));
 }
@@ -1250,7 +1249,6 @@ fn error_recovery_wire_value_no_width() {
 #[test]
 fn error_recovery_wire_no_value_no_width() {
     init_logger();
-    // TODO: custom error for this case?
     let message = get_errors_for(
         "wire foo;
          wire foo : * 42;"
@@ -1411,7 +1409,6 @@ fn error_colons_register_name() {
     assert!(message.contains("Unexpected token ':', expected"));
 }
 
-// TODO: custom error for this?
 #[test]
 fn error_wire_decl_as_assign() {
     init_logger();
@@ -1420,7 +1417,7 @@ fn error_wire_decl_as_assign() {
          "
     );
     debug!("message is {}", message);
-    assert!(message.contains("Unexpected token '=', expected"));
+    assert!(message.contains("declaration must be separate from assignment"));
 }
 
 #[test]
