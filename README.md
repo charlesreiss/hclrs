@@ -28,11 +28,39 @@ to install Rust and the Rust package manager Cargo. Then, you can build the prog
 
 This will create an `hclrs` binary in `target/release`.
 
+# Feature flags to vary language strictness
+
+HCLRS supports several feature flags to control how picky its language is:
+
+*  `strict-boolean-ops` (enabled by default): require arguments for `&&`, `||`, etc. to have width 1 bit or no width
+*  `strict-wire-widths-binary` (disabled by default): require arguments for `+`, `-`, etc. to have the same width (or any one to have no width)
+*  `require-mux-default` (enabled by default): require every case expression ("MUX") to have a default case of the form `1: value`
+
+You can build a version of HCLRS with these all disabled using something like:
+
+    cargo build --release --no-default-features
+
+and with particular features enabled with something like:
+
+    cargo build --release --no-default-features --features="strict--boolean-ops"
+
 # Tests
 
 The HCLRS source includes some (but probably too few) tests. There is an test which is ignored by default that uses
 reference files which are not included with this source distribution. These references include reference solutions
 which the author would rather not distribute publicly and prior student submissions which the author cannot redistribute.
+
+For the other tests, you can run them with something like
+
+    cargo test
+
+Many tests will produce debug output if you set an environment variable like `RUST_LOG=hclrs::tests=debug`. 
+
+# Debug logging
+
+Running `hclrs` (or its tests) with an environment variable like `RUST_LOG=hclrs=debug` will produce
+a lot of the debugging output. You can turn this on and off on a per-module basis (e.g.
+`RUST_LOG=hclrs::ast=debug,hclrs::program=debug`.)
 
 # License
 
