@@ -87,6 +87,9 @@ fn main_real() -> Result<bool, Error> {
     if parsed_opts.opt_present("d") {
         run_options.set_debug();
     }
+    if parsed_opts.opt_present("t") {
+        run_options.set_test();
+    }
     if parsed_opts.opt_present("i") {
         run_options.set_prompt(Box::new(press_enter));
     }
