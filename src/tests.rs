@@ -356,6 +356,8 @@ fn program_registers() {
         "register xY { a: 32 = 1; };
          x_a = Y_a + 1;").unwrap();
     let program = Program::new(statements, vec!()).unwrap();
+    assert!(program.defaulted_wires().contains("stall_Y"));
+    assert!(program.defaulted_wires().contains("bubble_Y"));
     let mut running_program = RunningProgram::new(program, 0, 0);
     assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
     assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
@@ -364,6 +366,50 @@ fn program_registers() {
     assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
     running_program.step().unwrap();
     assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
+}
+
+#[test]
+fn program_registers_stall() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "register xY { a: 32 = 1; };
+         x_a = Y_a + 1;
+         stall_Y = x_a > 2;").unwrap();
+    let program = Program::new(statements, vec!()).unwrap();
+    assert!(!program.defaulted_wires().contains("stall_Y"));
+    assert!(program.defaulted_wires().contains("bubble_Y"));
+    let mut running_program = RunningProgram::new(program, 0, 0);
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
+}
+
+#[test]
+fn program_registers_bubble() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "register xY { a: 32 = 1; };
+         x_a = Y_a + 1;
+         bubble_Y = x_a > 2;").unwrap();
+    let program = Program::new(statements, vec!()).unwrap();
+    assert!(program.defaulted_wires().contains("stall_Y"));
+    assert!(!program.defaulted_wires().contains("bubble_Y"));
+    let mut running_program = RunningProgram::new(program, 0, 0);
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("2").as_width(WireWidth::from(32))));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values().get("Y_a"), Some(&WireValue::from_decimal("1").as_width(WireWidth::from(32))));
     assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
 }
 

@@ -284,6 +284,10 @@ pub struct Program {
     constants: WireValues,
     actions: Vec<Action>,  // in topological order
     register_banks: Vec<RegisterBank>,
+
+    // wires which exist, but only ever have a default
+    // value and should not be displayed in debugging output
+    defaulted_wires: HashSet<String>,
 }
 
 
@@ -668,6 +672,7 @@ impl Program {
         let constants = resolve_constants(&constants_raw)?;
 
         // Step 3: resolve register banks
+        let mut defaulted_wires : HashSet<String> = HashSet::new();
         let mut register_banks = Vec::new();
         let mut errors = Vec::new();
         let mut seen_registers : HashMap<String, Span> = HashMap::new();
@@ -690,6 +695,14 @@ impl Program {
             stall_signal.push(out_prefix);
             let mut bubble_signal = String::from("bubble_");
             bubble_signal.push(out_prefix);
+            if !assignments.contains_key(stall_signal.as_str()) {
+                debug!("{:?} is not assigned", stall_signal);
+                defaulted_wires.insert(stall_signal.clone());
+            }
+            if !assignments.contains_key(bubble_signal.as_str()) {
+                debug!("{:?} is not assigned", bubble_signal);
+                defaulted_wires.insert(bubble_signal.clone());
+            }
             for register in &decl.registers {
                 let mut in_name = String::new();
                 let mut out_name = String::new();
@@ -828,6 +841,7 @@ impl Program {
             constants: constants,
             actions: actions,
             register_banks: register_banks,
+            defaulted_wires: defaulted_wires,
         })
     }
 
@@ -872,6 +886,10 @@ impl Program {
             }
         }
         Ok(())
+    }
+
+    pub fn defaulted_wires(&self) -> &HashSet<String> {
+        return &self.defaulted_wires;
     }
 }
 
