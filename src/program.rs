@@ -1196,6 +1196,9 @@ impl RunningProgram {
             if self.program.constants.contains_key(key) {
                 continue
             }
+            if self.program.defaulted_wires().contains(key) {
+                continue
+            }
             let value = self.values.get(key).unwrap();
             let value_width_bits = match value.width {
                 WireWidth::Unlimited => 64,
@@ -1207,7 +1210,7 @@ impl RunningProgram {
         }
         debug!("max_value_len = {}; max_name_len = {};\n", max_value_len, max_name_len);
         writeln!(w, "Values of wires:")?;
-        writeln!(w, "{:width$} {:>value_width$}", "Wire", "Value", width=max_name_len, value_width=max_value_len)?;
+        writeln!(w, "{:width$}  {:>value_width$}", "Wire", "Value", width=max_name_len, value_width=max_value_len)?;
         for key in &keys {
             if self.program.constants.contains_key(key) {
                 continue
@@ -1219,7 +1222,7 @@ impl RunningProgram {
             };
             let value_width_len = (value_width_bits as usize + 3) / 4 + 2;
             let extra_len = max_value_len - value_width_len;
-            writeln!(w, "{:width$} {empty:extra_len$}{:#0value_width_len$x}", key,
+            writeln!(w, "{:width$}  {empty:extra_len$}{:#0value_width_len$x}", key,
                 value.bits, width=max_name_len, value_width_len=value_width_len,
                 extra_len=extra_len, empty="")?
         }

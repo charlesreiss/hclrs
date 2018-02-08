@@ -1615,8 +1615,37 @@ fn debug_output() {
     running_program.step_with_output(&mut result).unwrap();
     let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
     debug!("result is {:?}", result_as_string);
-    assert!(result_as_string.contains("foo_bar_baz_quux             0x00000042"));
-    assert!(result_as_string.contains("i10bytes         0x00000000000000000000"));
+    assert!(result_as_string.contains("foo_bar_baz_quux              0x00000042"));
+    assert!(result_as_string.contains("i10bytes          0x00000000000000000000"));
+}
+
+
+#[test]
+fn debug_output_register() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "
+        register xY {
+            a : 32 = 0x1234;
+        }
+        x_a = 0x42;
+        Stat = 0;
+        pc = 0;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options = RunOptions::default();
+    options.set_debug();
+    running_program.set_options(options);
+    let mut result: Vec<u8> = Vec::new();
+    running_program.step_with_output(&mut result).unwrap();
+    let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
+    debug!("result is {:?}", result_as_string);
+    assert!(result_as_string.contains("Y_a                   0x00001234"));
+    assert!(result_as_string.contains("x_a                   0x00000042"));
+    assert!(result_as_string.contains("i10bytes  0x00000000000000000000"));
+    assert!(result_as_string.contains("stall_Y"));
 }
 
 #[test]
