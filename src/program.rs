@@ -1189,7 +1189,7 @@ impl RunningProgram {
 
     fn dump_values<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         let mut keys: Vec<String> = self.values.keys().cloned().collect();
-        keys.sort();
+        keys.sort_unstable_by(|a, b| a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()));
         let mut max_name_len = 4;
         let mut max_value_len = 3;
         for key in &keys {
