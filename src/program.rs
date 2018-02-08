@@ -1172,20 +1172,38 @@ impl RunningProgram {
     fn dump_values<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         let mut keys: Vec<String> = self.values.keys().cloned().collect();
         keys.sort();
-        let mut max_length = 4;
+        let mut max_name_len = 4;
+        let mut max_value_len = 3;
         for key in &keys {
             if self.program.constants.contains_key(key) {
                 continue
             }
-            max_length = max(key.len(), max_length);
+            let value = self.values.get(key).unwrap();
+            let value_width_bits = match value.width {
+                WireWidth::Unlimited => 64,
+                WireWidth::Bits(x) => x,
+            };
+            let value_width_len = (value_width_bits as usize + 3) / 4 + 2;
+            max_name_len = max(key.len(), max_name_len);
+            max_value_len = max(value_width_len, max_value_len);
         }
+        debug!("max_value_len = {}; max_name_len = {};\n", max_value_len, max_name_len);
         writeln!(w, "Values of wires:")?;
-        writeln!(w, "{:width$} {}", "Wire", "Value", width=max_length)?;
+        writeln!(w, "{:width$} {:>value_width$}", "Wire", "Value", width=max_name_len, value_width=max_value_len)?;
         for key in &keys {
             if self.program.constants.contains_key(key) {
                 continue
             }
-            writeln!(w, "{:width$} {:#x}", key, self.values.get(key).unwrap().bits, width=max_length)?
+            let value = self.values.get(key).unwrap();
+            let value_width_bits = match value.width {
+                WireWidth::Unlimited => 64,
+                WireWidth::Bits(x) => x,
+            };
+            let value_width_len = (value_width_bits as usize + 3) / 4 + 2;
+            let extra_len = max_value_len - value_width_len;
+            writeln!(w, "{:width$} {empty:extra_len$}{:#0value_width_len$x}", key,
+                value.bits, width=max_name_len, value_width_len=value_width_len,
+                extra_len=extra_len, empty="")?
         }
 
         Ok(())

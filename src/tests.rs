@@ -1569,7 +1569,8 @@ fn debug_output() {
     running_program.step_with_output(&mut result).unwrap();
     let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
     debug!("result is {:?}", result_as_string);
-    assert!(result_as_string.contains("foo_bar_baz_quux 0x42"));
+    assert!(result_as_string.contains("foo_bar_baz_quux             0x00000042"));
+    assert!(result_as_string.contains("i10bytes         0x00000000000000000000"));
 }
 
 #[test]
