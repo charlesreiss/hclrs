@@ -1189,7 +1189,7 @@ impl RunningProgram {
 
     fn dump_values<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         let mut keys: Vec<String> = self.values.keys().cloned().collect();
-        keys.sort_unstable_by(|a, b| a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()));
+        keys.sort_unstable_by(|a, b| a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()).then(a.cmp(&b)));
         let mut max_name_len = 4;
         let mut max_value_len = 3;
         for key in &keys {
@@ -1213,6 +1213,9 @@ impl RunningProgram {
         writeln!(w, "{:width$}  {:>value_width$}", "Wire", "Value", width=max_name_len, value_width=max_value_len)?;
         for key in &keys {
             if self.program.constants.contains_key(key) {
+                continue
+            }
+            if self.program.defaulted_wires().contains(key) {
                 continue
             }
             let value = self.values.get(key).unwrap();

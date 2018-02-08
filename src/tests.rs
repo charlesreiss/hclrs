@@ -1645,7 +1645,7 @@ fn debug_output_register() {
     assert!(result_as_string.contains("Y_a                   0x00001234"));
     assert!(result_as_string.contains("x_a                   0x00000042"));
     assert!(result_as_string.contains("i10bytes  0x00000000000000000000"));
-    assert!(result_as_string.contains("stall_Y"));
+    assert!(!result_as_string.contains("stall_Y"));
 }
 
 #[test]
