@@ -1675,6 +1675,7 @@ fn suggest_capitalization_constant_decl() {
     ");
     debug!("message is {:?}", message);
     assert!(message.contains("Did you mean 'LE'?"));
+    assert!(!message.contains("fixed"));  // message should not mention fixed functionality
 }
 
 #[test]
@@ -1689,6 +1690,7 @@ fn suggest_capitalization_register_default() {
     ");
     debug!("message is {:?}", message);
     assert!(message.contains("Did you mean 'NOP'?"));
+    assert!(!message.contains("fixed"));  // message should not mention fixed functionality
 }
 
 #[test]
@@ -1700,6 +1702,7 @@ fn suggest_capitalization_assignment_constant() {
     ");
     debug!("message is {:?}", message);
     assert!(message.contains("Did you mean 'STAT_AOK'?"));
+    assert!(!message.contains("fixed"));  // message should not mention fixed functionality
 }
 
 #[test]
@@ -1727,4 +1730,5 @@ fn usage_and_assignment_of_undeclared_gives_both_errors() {
     debug!("message is {:?}", message);
     assert!(message.contains("assigned value"));
     assert!(message.contains("in expression"));
+    assert!(!message.contains("fixed"));  // message should not mention fixed functionality
 }

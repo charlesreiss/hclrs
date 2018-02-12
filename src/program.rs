@@ -443,6 +443,7 @@ fn assignments_to_actions<'a>(
         Ok(sorted) => {
             // FIXME: covered is just a sanity-check, should be removeable
             debug!("using order {:?}", sorted);
+            let mut seen_undeclared : HashSet<&'a str> = HashSet::new();
             let mut covered = known_values.clone();
             let mut errors = Vec::new();
             for name in sorted {
@@ -450,6 +451,7 @@ fn assignments_to_actions<'a>(
                 match assignments.get(name) {
                     Some(expr) => {
                         for in_name in expr.referenced_wires() {
+                            seen_undeclared.remove(&in_name);
                             assert!(covered.contains(&in_name));
                         }
                         if let Some(the_width) = widths.get(name) {
@@ -492,7 +494,7 @@ fn assignments_to_actions<'a>(
                                         errors.push(Error::UnsetWire(String::from(name), *span));
                                     },
                                     None => {
-                                        errors.push(Error::UnsetBuiltinWire(String::from(name)));
+                                        seen_undeclared.insert(name);
                                     },
                                 }
                             }
@@ -500,6 +502,13 @@ fn assignments_to_actions<'a>(
                     }
                 }
                 covered.insert(name);
+            }
+            for name in seen_undeclared {
+                // FIXME: this is probably really an internal error
+                //        since any undeclared wire should either be fixed
+                //        functionality or have a use
+                // Assuming this is true, we should just be able to assert!() here
+                errors.push(Error::UnsetUndeclaredWire(String::from(name)));
             }
             if errors.len() > 0 {
                 return Err(Error::MultipleErrors(errors))
