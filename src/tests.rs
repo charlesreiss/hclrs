@@ -1706,6 +1706,19 @@ fn suggest_capitalization_assignment_constant() {
 }
 
 #[test]
+fn suggest_capitalization_assignment_constant_to_constant() {
+    init_logger();
+    let message = get_errors_for("
+        const FOO = stat_aok;
+        Stat = STAT_AOK;
+        pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("Did you mean 'STAT_AOK'?"));
+    assert!(!message.contains("fixed"));  // message should not mention fixed functionality
+}
+
+#[test]
 fn suggest_capitalization_assignment_wire() {
     init_logger();
     let message = get_errors_for("
@@ -1717,7 +1730,6 @@ fn suggest_capitalization_assignment_wire() {
     debug!("message is {:?}", message);
     assert!(message.contains("Did you mean 'Foo'?"));
 }
-
 
 #[test]
 fn usage_and_assignment_of_undeclared_gives_both_errors() {
