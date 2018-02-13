@@ -1380,7 +1380,7 @@ impl RunningProgram {
     pub fn done(&self) -> bool {
         (self.status_or_default(1) != 1 &&
          self.status_or_default(1) != 0
-         ) || self.cycle > self.options.timeout
+         ) || self.cycle >= self.options.timeout
     }
 
     pub fn halted(&self) -> bool {

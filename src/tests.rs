@@ -440,6 +440,57 @@ fn memory_program() {
 }
 
 #[test]
+fn terminate_timeout() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "
+        pc = 0; Stat = 1;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options: RunOptions = Default::default();
+    options.set_timeout(3);
+    running_program.set_options(options);
+    let mut result_vec = Vec::new();
+    running_program.run(&mut result_vec).unwrap();
+    let result_str = String::from_utf8(result_vec.clone()).unwrap();
+    assert!(!result_str.contains("timed out"));
+    running_program.dump_y86(&mut result_vec).unwrap();
+    let result_str = String::from_utf8(result_vec).unwrap();
+    assert_eq!(running_program.cycle(), 3);
+    assert!(result_str.contains("timed out"));
+}
+
+#[test]
+fn terminate_halt() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "
+        register xX { count: 32 = 1; };
+        x_count = X_count + 1;
+        pc = 0; Stat = [
+            X_count == 3 : 2;
+            1: 1;
+        ]
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options: RunOptions = Default::default();
+    options.set_timeout(10);
+    running_program.set_options(options);
+    let mut result_vec = Vec::new();
+    running_program.run(&mut result_vec).unwrap();
+    let result_str = String::from_utf8(result_vec.clone()).unwrap();
+    assert!(!result_str.contains("halted"));
+    running_program.dump_y86(&mut result_vec).unwrap();
+    let result_str = String::from_utf8(result_vec).unwrap();
+    assert_eq!(running_program.cycle(), 3);
+    assert!(result_str.contains("halted"));
+}
+
+#[test]
 fn eval_bitselect() {
     init_logger();
     let mut errors = Vec::new();
