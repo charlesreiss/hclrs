@@ -1716,6 +1716,25 @@ fn error_mux_default() {
 }
 
 #[test]
+#[cfg(feature="disallow-multiple-mux-default")]
+fn error_mux_two_defaults() {
+    init_logger();
+    let message = get_errors_for("
+    wire foo : 1;
+    foo = [
+        REG_RSP: 100;
+        1: 42;
+    ];
+    Stat = 0;
+    pc = 0;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("multiple conditions which are always true"));
+}
+
+
+
+#[test]
 fn suggest_capitalization_constant_decl() {
     init_logger();
     let message = get_errors_for("

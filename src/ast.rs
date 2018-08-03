@@ -17,6 +17,8 @@ const STRICT_WIDTHS_BINARY: bool = cfg!(feature="strict-wire-widths-binary");
 const STRICT_WIDTHS_BOOLEAN: bool = cfg!(feature="strict-boolean-ops");
 // *  require default options for MUXes
 const REQUIRE_MUX_DEFAULT: bool = cfg!(feature="require-mux-default");
+// *  disallow multiple default options for MUXes, which usually means using a constant instaed of comparing to it
+const DISALLOW_MULTIPLE_MUX_DEFAULT: bool = cfg!(feature="disallow-multiple-mux-default");
 
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq,PartialOrd,Ord)]
@@ -435,9 +437,13 @@ impl SpannedExpr {
                 let mut maybe_width = Some(WireWidth::Unlimited);
                 let mut all_widths = Vec::new();
                 let mut seen_always_true = false;
+                let mut seen_always_true_twice = false;
                 for option in options {
                     option.condition.get_width_and_check(widths, constants)?;
                     if option.condition.always_true(&constants) {
+                        if seen_always_true {
+                            seen_always_true_twice = true;
+                        }
                         seen_always_true = true;
                     }
                     let option_width = option.value.get_width_and_check(widths, constants)?;
@@ -448,6 +454,9 @@ impl SpannedExpr {
                 }
                 if REQUIRE_MUX_DEFAULT && !seen_always_true {
                     return Err(Error::NoMuxDefaultOption(self.clone()));
+                }
+                if DISALLOW_MULTIPLE_MUX_DEFAULT && seen_always_true_twice {
+                    return Err(Error::MultipleMuxDefaultOption(self.clone()));
                 }
                 match maybe_width {
                     Some(width) => Ok(width),

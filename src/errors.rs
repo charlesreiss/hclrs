@@ -77,6 +77,7 @@ pub enum Error {
     MissingAssignmentMux(Span),
     RegisterDeclaredWithWire(Span),
     NoMuxDefaultOption(SpannedExpr),
+    MultipleMuxDefaultOption(SpannedExpr),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -465,6 +466,11 @@ impl Error {
                 error(output, "Mux (case expression) missing required default option (e.g. '1 : some_value;'):")?;
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
             },
+            Error::MultipleMuxDefaultOption(ref expr) => {
+                error(output, "Mux (case expression) has multiple conditions which are always true:")?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
+                error_continue(output, "(using constants instead of the result of comparing wires to constants?)")?;
+            }
             Error::InvalidConstant(ref span) => {
                 error(output, "Constant value is out of range:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -625,6 +631,7 @@ impl error::Error for Error {
             Error::MissingAssignmentMux(_) => "missing '=' before Mux, probably",
             Error::RegisterDeclaredWithWire(_) => "register declared with 'wire', probably",
             Error::NoMuxDefaultOption(_) => "no default option for mux",
+            Error::MultipleMuxDefaultOption(_) => "multiple default option for mux",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",

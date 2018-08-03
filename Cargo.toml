@@ -6,10 +6,11 @@ authors = ["Charles Reiss <cr4bd@virginia.edu>"]
 build = "build.rs" # LARLRPOP preprocessing
 
 [features]
-default = ["strict-boolean-ops", "require-mux-default"]
+default = ["strict-boolean-ops", "require-mux-default", "disallow-multiple-mux-default"]
 strict-boolean-ops = []
 strict-wire-widths-binary = []
 require-mux-default = []
+disallow-multiple-mux-default = []
 
 [profile.release]
 lto = true
