@@ -129,6 +129,10 @@ fn main_real() -> Result<bool, Error> {
         return Ok(false);
     }
     let yo_filename: &str = &free_args[1];
+    if !yo_filename.ends_with(".yo") {
+        writeln!(stderr(), "'{}' does not have the extension .yo", yo_filename).unwrap();
+        return Ok(false);
+    }
     let timeout = 
         if free_args.len() > 2 {
             match u32::from_str_radix(&free_args[2], 10) {
