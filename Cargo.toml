@@ -14,30 +14,19 @@ require-mux-default = []
 [profile.release]
 lto = true
 
-# For tokenization
-[dependencies.regex]
-version = "0.2.1"
-
 # Parser runtime library
 [dependencies.lalrpop-util]
-version = "0.14"
+version = "0.15.2"
 
 # Parser library
 [build-dependencies.lalrpop]
-version = "0.14"
-
-# For u128
-[dependencies.extprim]
-version = "1.4.0"
-
-[dependencies.num-traits]
-version = "0.1.39"
+version = "0.15.2"
 
 [dependencies.log]
-version = "0.3.8"
-
-[dependencies.env_logger]
 version = "0.4.3"
 
+[dependencies.env_logger]
+version = "0.5.11"
+
 [dependencies.getopts]
-version = "0.2"
+version = "0.2.18"

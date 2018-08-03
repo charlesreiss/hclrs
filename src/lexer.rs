@@ -1,7 +1,6 @@
 use ast::{WireValue, WireWidth};
 use std::cell::RefCell;
 use std::str::CharIndices;
-use extprim::u128::u128;
 
 use errors::Error;
 use io::FileContents;

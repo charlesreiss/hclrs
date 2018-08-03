@@ -1,11 +1,10 @@
 use ast::{Statement, SpannedExpr, Expr, ConstDecl, WireDecl, WireValue, WireValues, WireWidth, BinOpCode, UnOpCode, MuxOption};
 use program::{Program, RunningProgram, Y86_PREAMBLE};
-use parser::{parse_Expr, parse_WireDecls, parse_ConstDecls, parse_Statements};
+use parser::{ExprParser, WireDeclsParser, ConstDeclsParser, StatementsParser};
 use lexer::{Lexer, Tok};
 use errors::Error;
 use super::*;
 
-use extprim::u128::u128;
 use lalrpop_util::{ErrorRecovery, ParseError};
 
 use std::env;
@@ -22,7 +21,7 @@ type ErrorRecoveryType<'input> = ErrorRecovery<usize, Tok<'input>, Error>;
 
 pub fn init_logger() {
     TEST_LOGGER_ONCE.call_once(|| {
-        env_logger::init().unwrap();
+        env_logger::init()
     })
 }
 
@@ -30,14 +29,14 @@ pub fn init_logger() {
 fn parse_Expr_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
         Result<SpannedExpr, ParseErrorType<'input>> {
     let lexer = Lexer::new(s);
-    parse_Expr(errors, lexer)
+    ExprParser::new().parse(errors, lexer)
 }
 
 #[allow(non_snake_case)]
 fn parse_WireDecls_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
         Result<Vec<WireDecl>, ParseErrorType<'input>> {
     let lexer = Lexer::new(s);
-    parse_WireDecls(errors, lexer)
+    WireDeclsParser::new().parse(errors, lexer)
 }
 
 
@@ -45,7 +44,7 @@ fn parse_WireDecls_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &
 fn parse_ConstDecls_str<'input>(errors: &mut Vec<ErrorRecoveryType<'input>>, s: &'input str) ->
         Result<Vec<ConstDecl>, ParseErrorType<'input>> {
     let lexer = Lexer::new(s);
-    parse_ConstDecls(errors, lexer)
+    ConstDeclsParser::new().parse(errors, lexer)
 }
 
 #[allow(non_snake_case)]
@@ -53,7 +52,7 @@ fn parse_Statements_str<'input>(
     errors: &mut Vec<ErrorRecoveryType<'input>>,
     s: &'input str) -> Result<Vec<Statement>, ParseErrorType<'input>> {
     let lexer = Lexer::new(s);
-    parse_Statements(errors, lexer)
+    StatementsParser::new().parse(errors, lexer)
 }
 
 fn strip_spans(mut expr: SpannedExpr) -> SpannedExpr {
@@ -283,15 +282,15 @@ fn eval_binaryops() {
     let mut errors = Vec::new();
     assert_eq!(
         parse_Expr_str(&mut errors, "0b1000 & 15").unwrap().evaluate_constant().unwrap(),
-        WireValue { bits: u128::new(8), width: WireWidth::Bits(4) }
+        WireValue { bits: 8, width: WireWidth::Bits(4) }
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "0b1000 & 15 == 0x8").unwrap().evaluate_constant().unwrap(),
-        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
+        WireValue { bits: 1, width: WireWidth::Bits(1) }
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "1 ^ 0xFFFF == 0xFFFE").unwrap().evaluate_constant().unwrap(),
-        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
+        WireValue { bits: 1, width: WireWidth::Bits(1) }
     );
 }
 
@@ -313,7 +312,7 @@ fn eval_unops() {
     );
     assert_eq!(
         parse_Expr_str(&mut errors, "~42").unwrap().evaluate_constant().unwrap(),
-        WireValue { bits: !u128::new(42), width: WireWidth::Unlimited }
+        WireValue { bits: !42, width: WireWidth::Unlimited }
     );
     assert_eq!(errors.len(), 0);
 }
@@ -324,7 +323,7 @@ fn eval_mux() {
     let mut errors = Vec::new();
     assert_eq!(
         parse_Expr_str(&mut errors, "[ 0 : 42; 0x42 : 43 ; 1 : 44; ]").unwrap().evaluate_constant().unwrap(),
-        WireValue { bits: u128::new(43), width: WireWidth::Unlimited }
+        WireValue { bits: 43, width: WireWidth::Unlimited }
     );
     // FIXME: more tests
 }

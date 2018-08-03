@@ -12,7 +12,7 @@ use hclrs::*;
 use getopts::Options;
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
     let okay = main_real().unwrap();
     if okay {
         std::process::exit(0);

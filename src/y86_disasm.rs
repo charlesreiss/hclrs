@@ -1,4 +1,3 @@
-use extprim::u128::u128;
 use std::convert::Into;
 use std::io::Write;
 use std::io;
@@ -35,12 +34,12 @@ fn name_cc(ifun: u8) -> &'static str {
 
 // returns number of bytes of instruction used
 pub fn disassemble<W: Write>(w: &mut W, instruction: u128) -> Result<u8, io::Error> {
-    let icode: u8 = (((instruction >> 4) & u128::new(0xF)) as u128).low64() as u8;
-    let ifun: u8 = (instruction & u128::new(0xF)).low64() as u8;
-    let ra: u8 = (((instruction >> 12) & u128::new(0xF)) as u128).low64() as u8;
-    let rb: u8 = (((instruction >> 8) & u128::new(0xF)) as u128).low64() as u8;
-    let disp: u64  = ((instruction >> 16) as u128).low64();
-    let dest: u64 = ((instruction >> 8) as u128).low64();
+    let icode: u8 = ((instruction >> 4) & 0xF) as u8;
+    let ifun: u8 = (instruction & 0xF) as u8;
+    let ra: u8 = ((instruction >> 12) & 0xF) as u8;
+    let rb: u8 = ((instruction >> 8) & 0xF) as u8;
+    let disp: u64  = (instruction >> 16) as u64;
+    let dest: u64 = (instruction >> 8) as u64;
     let used_bytes = match icode {
         0 => {
             write!(w, "halt")?;
@@ -120,18 +119,17 @@ pub fn disassemble_to_string(instruction: u128) -> (u8, String) {
 #[cfg(test)]
 mod tests {
     use super::disassemble_to_string;
-    use super::u128;
     #[test]
     fn simple() {
-        assert_eq!(disassemble_to_string(u128::new(0x00)), (1, String::from("halt")));
-        assert_eq!(disassemble_to_string(u128::new(0x10)), (1, String::from("nop")));
-        assert_eq!(disassemble_to_string(u128::new(0x3fb0)), (2, String::from("popq %rbx")));
-        assert_eq!(disassemble_to_string(u128::new(0x3fa0)), (2, String::from("pushq %rbx")));
-        assert_eq!(disassemble_to_string(u128::new(0x8920)), (2, String::from("rrmovq %r8, %r9")));
+        assert_eq!(disassemble_to_string(0x00), (1, String::from("halt")));
+        assert_eq!(disassemble_to_string(0x10), (1, String::from("nop")));
+        assert_eq!(disassemble_to_string(0x3fb0), (2, String::from("popq %rbx")));
+        assert_eq!(disassemble_to_string(0x3fa0), (2, String::from("pushq %rbx")));
+        assert_eq!(disassemble_to_string(0x8920), (2, String::from("rrmovq %r8, %r9")));
         // 71 FE BE AD / DE AA AA AA
-        assert_eq!(disassemble_to_string(u128::from_parts(0xAAAAAAAAAAAAAA00, 0xDEADBEEF71)), (9, String::from("jle 0xdeadbeef")));
-        assert_eq!(disassemble_to_string(u128::new(0x8961)), (2, String::from("subq %r8, %r9")));
-        assert_eq!(disassemble_to_string(u128::from_parts(0xAAAAAAAAAAAA0000, 0x0000DEADBEEF8940)), (10, String::from("rmmovq %r8, 0xdeadbeef(%r9)")));
-        assert_eq!(disassemble_to_string(u128::from_parts(0x000000000000FFFF, 0xFFFFFFFFFFFFFA30)), (10, String::from("irmovq $0xffffffffffffffff, %r10")));
+        assert_eq!(disassemble_to_string(0xAAAAAAAAAAAAAA00000000DEADBEEF71), (9, String::from("jle 0xdeadbeef")));
+        assert_eq!(disassemble_to_string(0x8961), (2, String::from("subq %r8, %r9")));
+        assert_eq!(disassemble_to_string(0xAAAAAAAAAAAA00000000DEADBEEF8940), (10, String::from("rmmovq %r8, 0xdeadbeef(%r9)")));
+        assert_eq!(disassemble_to_string(0x000000000000FFFFFFFFFFFFFFFFFA30), (10, String::from("irmovq $0xffffffffffffffff, %r10")));
     }
 }

@@ -1,8 +1,3 @@
-extern crate extprim;
-extern crate num_traits;
-
-use extprim::u128::u128;
-
 use std::ops::{Deref, DerefMut};
 use std::collections::hash_map::HashMap;
 use std::collections::hash_set::HashSet;
@@ -11,8 +6,6 @@ use std::fmt;
 use std::fmt::{Display, LowerHex, Formatter};
 use std::num::ParseIntError;
 use std::str::FromStr;
-
-use self::num_traits::cast::ToPrimitive;
 
 use lexer::Span;
 use errors::{find_close_names_in, Error};
@@ -108,9 +101,9 @@ impl WireWidth {
 
     pub fn mask(self) -> u128 {
         match self {
-            WireWidth::Unlimited => !u128::new(0),
-            WireWidth::Bits(0) => u128::new(0),
-            WireWidth::Bits(s) => ((!u128::new(0)) >> (128 - s)),
+            WireWidth::Unlimited => !0,
+            WireWidth::Bits(0) => 0,
+            WireWidth::Bits(s) => ((!0) >> (128 - s)),
         }
     }
 }
@@ -135,11 +128,11 @@ impl LowerHex for WireValue {
 
 impl WireValue {
     pub fn true_value() -> WireValue {
-        WireValue { bits: u128::new(1), width: WireWidth::Bits(1) }
+        WireValue { bits: 1, width: WireWidth::Bits(1) }
     }
 
     pub fn false_value() -> WireValue {
-        WireValue { bits: u128::new(0), width: WireWidth::Bits(1) }
+        WireValue { bits: 0, width: WireWidth::Bits(1) }
     }
 
     pub fn new(v: u128) -> WireValue {
@@ -147,7 +140,7 @@ impl WireValue {
     }
 
     pub fn from_u64(v: u64) -> WireValue {
-        WireValue { bits: u128::new(v), width: WireWidth::Unlimited }
+        WireValue { bits: v.into(), width: WireWidth::Unlimited }
     }
 
     pub fn from_binary(s: &str) -> WireValue {
@@ -181,12 +174,12 @@ impl WireValue {
     }
 
     pub fn is_true(self) -> bool {
-        self.bits > u128::new(0)
+        self.bits > 0
     }
 }
 
 impl From<u64> for WireValue {
-    fn from(x: u64) -> WireValue { WireValue::new(u128::new(x)) }
+    fn from(x: u64) -> WireValue { WireValue::new(x.into()) }
 }
 
 #[derive(Debug,Eq,PartialEq,Clone,Copy)]
@@ -244,7 +237,7 @@ pub enum BinOpCode {
 }
 
 fn boolean_to_value(x: bool) -> u128 {
-    if x { u128::new(1) } else { u128::new(0) }
+    if x { 1 } else { 0 }
 }
 
 impl BinOpCode {
@@ -284,23 +277,23 @@ impl BinOpCode {
             BinOpCode::Less => boolean_to_value(left < right),
             BinOpCode::Greater => boolean_to_value(left > right),
             BinOpCode::LogicalAnd => boolean_to_value(
-                left != u128::new(0) && right != u128::new(0)
+                left != 0 && right != 0
             ),  // FIXME: shortcircuit support?
             BinOpCode::LogicalOr =>  boolean_to_value(
-                left != u128::new(0) || right != u128::new(0)
+                left != 0 || right != 0
             ),
             BinOpCode::LeftShift =>  match (
-                    left.wrapping_shl(right.to_u32().unwrap_or(0)),
-                    right >= u128::new(128)
+                    left.wrapping_shl(right as u32),
+                    right >= 128
                 ) {
-                (_, true) => u128::new(0),
+                (_, true) => 0,
                 (x, false) => x,
             },
             BinOpCode::RightShift => match (
-                    left.wrapping_shr(right.to_u32().unwrap_or(0)),
-                    right >= u128::new(128)
+                    left.wrapping_shr(right as u32),
+                    right >= 128
                 ) {
-                (_, true) => u128::new(0),
+                (_, true) => 0,
                 (x, false) => x,
             },
             BinOpCode::Error => panic!("unreported parse error"),
@@ -344,9 +337,9 @@ impl UnOpCode {
     fn apply(self, value: WireValue) -> Result<WireValue, Error> {
         let new_value = match self {
             UnOpCode::Plus => value.bits,
-            UnOpCode::Negate => !value.bits + u128::new(1),
+            UnOpCode::Negate => !value.bits + 1,
             UnOpCode::Complement => !value.bits,
-            UnOpCode::Not => if value.bits != u128::new(0) { u128::new(0) } else { u128::new(1) },
+            UnOpCode::Not => if value.bits != 0 { 0 } else { 1 },
         };
         Ok(WireValue { bits: new_value & value.width.mask(),
                        width: if self == UnOpCode::Not { WireWidth::Bits(1) } else { value.width } })
@@ -543,7 +536,7 @@ impl SpannedExpr {
                 opcode.apply(inner_value)
             },
             Expr::Mux(ref options) => {
-                let mut result: WireValue = WireValue::new(u128::new(0));
+                let mut result: WireValue = WireValue::new(0);
                 for ref option in options {
                     if option.condition.evaluate(wires)?.is_true() {
                         result = try!(option.value.evaluate(wires));

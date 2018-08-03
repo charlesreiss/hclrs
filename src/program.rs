@@ -1,5 +1,4 @@
 use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr};
-use extprim::u128::u128;
 use errors::{find_close_names_in, Error};
 use lexer::Span;
 use y86_disasm::{disassemble_to_string, name_register};
@@ -972,13 +971,13 @@ impl Memory {
 
     pub fn read(&self, address: u64, bytes: u8) -> WireValue {
         assert!(bytes <= 16);
-        let mut result = u128::new(0);
+        let mut result = 0;
         let mut remaining = bytes;
         let total = remaining;
         let mut cur_addr = address;
         debug!("reading {:#x} ({:?} bytes)", address, bytes);
         while remaining > 0 {
-            result |= u128::new(*self.data.get(&cur_addr).unwrap_or(&0) as u64) << ((total - remaining) * 8);
+            result |= (*self.data.get(&cur_addr).unwrap_or(&0) as u128) << ((total - remaining) * 8);
             debug!("reading {:#x}; accumulated result is {:#x}", cur_addr, result);
             cur_addr = cur_addr.wrapping_add(1);
             remaining -= 1;
@@ -993,7 +992,7 @@ impl Memory {
         let mut cur_addr = address;
         debug!("write {:#x} ({:?} bytes) into {:#x}", value, bytes, address);
         while remaining > 0 {
-            let to_write = (value >> ((total - remaining) * 8)).low64() as u8;
+            let to_write = (value >> ((total - remaining) * 8)) as u8;
             debug!("writing {:#x} into {:#x}", to_write, cur_addr);
             self.data.insert(cur_addr, to_write);
             cur_addr = cur_addr.wrapping_add(1);
@@ -1272,7 +1271,7 @@ impl RunningProgram {
                    };
                    if do_read {
                        let address_value = *self.values.get(address).unwrap();
-                       let value = self.memory.read(address_value.bits.low64(), *bytes);
+                       let value = self.memory.read(address_value.bits as u64, *bytes);
                        if self.options.trace_fixed_functionality {
                            writeln!(out,
                                     "{} set to 0x{:x} (reading {} bytes from memory at {}=0x{:x})",
@@ -1284,7 +1283,7 @@ impl RunningProgram {
                                write!(out, "pc = 0x{:x}; loaded [", address_value)?;
                                let (num_bytes, instruction) = disassemble_to_string(value.bits);
                                for i in 0..num_bytes {
-                                   let cur_byte = ((value.bits >> (8 * i)) as u128).low64() & 0xFF;
+                                   let cur_byte = ((value.bits >> (8 * i)) as u128) & 0xFF;
                                    write!(out, "{:02x} ", cur_byte)?;
                                }
                                writeln!(out, ": {}]", instruction)?;
@@ -1296,7 +1295,7 @@ impl RunningProgram {
                                     "not reading from memory since {} is 0", is_read.clone().unwrap())?;
                        }
                        // keep the result well-defined
-                       let zero = WireValue::new(u128::new(0)).as_width(WireWidth::from((bytes * 8) as usize));
+                       let zero = WireValue::new(0).as_width(WireWidth::from((bytes * 8) as usize));
                        self.values.insert(out_port.clone(), zero);
                    }
                },
@@ -1313,21 +1312,21 @@ impl RunningProgram {
                                     "writing {}={} to memory at {}=0x{:x}",
                                     in_port, input_value, address, address_value)?;
                        }
-                       self.memory.write(address_value.bits.low64(), input_value.bits, *bytes);
+                       self.memory.write(address_value.bits as u64, input_value.bits, *bytes);
                    } else if self.options.trace_fixed_functionality {
                        writeln!(out,
                                 "not writing to memory since {} is 0", is_write.clone().unwrap())?;
                    }
                },
                &Action::SetStatus { ref in_wire } => {
-                   self.last_status = Some(self.values.get(in_wire).unwrap().bits.low64() as u8);
+                   self.last_status = Some(self.values.get(in_wire).unwrap().bits as u8);
                },
                &Action::ReadProgramRegister { ref number, ref out_port } => {
                    let number_wire = number;
-                   let number = self.values.get(number_wire).unwrap().bits.low64() as usize;
+                   let number = self.values.get(number_wire).unwrap().bits as usize;
                    if number < self.registers.len() {
                        self.values.insert(out_port.clone(),
-                           WireValue { bits: u128::new(self.registers[number]), width: WireWidth::Bits(64) }
+                           WireValue { bits: self.registers[number].into(), width: WireWidth::Bits(64) }
                        );
                        if self.options.trace_fixed_functionality {
                            writeln!(out,
@@ -1338,15 +1337,15 @@ impl RunningProgram {
                    } else {
                        // should not be reached, but make sure behavior is consistent in case
                        self.values.insert(out_port.clone(), WireValue {
-                           bits: u128::new(0), width: WireWidth::Bits(64)
+                           bits: 0, width: WireWidth::Bits(64)
                        });
                    }
                },
                &Action::WriteProgramRegister { ref number, ref in_port } => {
                    let number_wire = number;
-                   let number = self.values.get(number_wire).unwrap().bits.low64() as usize;
+                   let number = self.values.get(number_wire).unwrap().bits as usize;
                    if number < self.registers.len() && number != self.zero_register {
-                       self.registers[number] = self.values.get(in_port).unwrap().bits.low64();
+                       self.registers[number] = self.values.get(in_port).unwrap().bits as u64;
                        if self.options.trace_fixed_functionality {
                            writeln!(out,
                                     "writing {}=0x{:x} into register {}={} ({})",
@@ -1373,7 +1372,7 @@ impl RunningProgram {
 
     pub fn status_or_default(&self, default: u8) -> u8 {
         let value = self.values.get("Stat").unwrap_or(&WireValue::from_u64(default as u64)).bits;
-        value.low64() as u8
+        value as u8
     }
 
     // FIXME: hard-coded Y86 status codes
@@ -1544,7 +1543,6 @@ mod tests {
     use ::tests::init_logger;
     use ast::{WireWidth, WireValue};
 
-    use extprim::u128::u128;
     use std::fmt::Debug;
     use std::hash::Hash;
     use std::collections::hash_set::HashSet;
@@ -1668,24 +1666,24 @@ mod tests {
         let mut memory = Memory::new();
         assert_eq!(
             memory.read(0, 8),
-            WireValue { bits: u128::new(0), width: WireWidth::Bits(64) }
+            WireValue { bits: 0, width: WireWidth::Bits(64) }
         );
         assert_eq!(
             memory.read(1, 8),
-            WireValue { bits: u128::new(0), width: WireWidth::Bits(64) }
+            WireValue { bits: 0, width: WireWidth::Bits(64) }
         );
         assert_eq!(
             memory.read(9, 4),
-            WireValue { bits: u128::new(0), width: WireWidth::Bits(32) }
+            WireValue { bits: 0, width: WireWidth::Bits(32) }
         );
-        memory.write(1, u128::new(0x0123456789ABCDEF), 8);
+        memory.write(1, 0x0123456789ABCDEF, 8);
         assert_eq!(
             memory.read(5, 4),
-            WireValue { bits: u128::new(0x01234567), width: WireWidth::Bits(32) }
+            WireValue { bits: 0x01234567, width: WireWidth::Bits(32) }
         );
         assert_eq!(
             memory.read(3, 2),
-            WireValue { bits: u128::new(0x89AB), width: WireWidth::Bits(16) }
+            WireValue { bits: 0x89AB, width: WireWidth::Bits(16) }
         );
     }
 

@@ -3,7 +3,6 @@ extern crate log;
 extern crate env_logger;
 
 extern crate lalrpop_util;
-extern crate extprim;
 
 mod y86_disasm;
 mod parser;
@@ -18,7 +17,7 @@ mod tests;
 use std::path::Path;
 use lexer::Lexer;
 use lexer::LAST_LOC;
-use parser::parse_Statements;
+use parser::StatementsParser;
 use std::panic::catch_unwind;
 
 pub use errors::Error;
@@ -42,7 +41,7 @@ fn internal_parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
     let mut errors = Vec::new();
     let lexer = Lexer::new_for_file(contents);
     let statements;
-    match parse_Statements(&mut errors, lexer) {
+    match StatementsParser::new().parse(&mut errors, lexer) {
         Ok(s) => statements = s,
         Err(e) => {
             let mut errors: Vec<Error> = errors.into_iter().map(|err_rec| Error::from(err_rec)).collect();

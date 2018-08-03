@@ -1,7 +1,6 @@
 // We create some parse_* functions for testing only.
 #![cfg_attr(not(test), allow(dead_code))]
 
-use extprim::u128::u128;
 use ast::{Expr, ConstDecl, WireDecl, WireWidth, WireValue,
           BinOpCode, UnOpCode, MuxOption, Assignment, RegisterBankDecl, RegisterDecl, Statement, SpannedExpr};
 use errors::Error;
@@ -88,8 +87,8 @@ Semicolons1<T>: Vec<T> = Repeat1<";", T>;
 
 WidthConstant : WireWidth = {
     <start:@R> <constant:CONSTANT> <end:@L> =>? {
-        if constant.bits <= u128::new(128) {
-            Ok(WireWidth::Bits(constant.bits.low64() as u8))
+        if constant.bits <= 128 {
+            Ok(WireWidth::Bits(constant.bits as u8))
         } else {
             Err(ParseError::User { error: Error::InvalidWireWidth((start, end)) })
         }
@@ -103,8 +102,8 @@ WidthConstant : WireWidth = {
 
 SimpleConstant : u8 = {
     <start:@R> <constant:CONSTANT> <end:@L> =>? {
-        if constant.bits <= u128::new(128) {
-            Ok(constant.bits.low64() as u8)
+        if constant.bits <= 128 {
+            Ok(constant.bits as u8)
         } else {
             Err(ParseError::User { error: Error::InvalidConstant((start, end)) })
         }
