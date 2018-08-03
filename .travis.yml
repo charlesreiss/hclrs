@@ -22,6 +22,10 @@ matrix:
           packages:
             - gcc-multilib
     - env: TARGET=i686-unknown-linux-musl
+      addons:
+        apt:
+          packages:
+            - gcc-multilib
     - env: TARGET=x86_64-unknown-linux-gnu
     - env: TARGET=x86_64-unknown-linux-musl
 
