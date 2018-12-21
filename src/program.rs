@@ -1,4 +1,5 @@
 use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr};
+use ast::{Statement, WireDecl, WireWidth, WireValue, WireValues, SpannedExpr,Expr,BinOpCode, UnOpCode};
 use errors::{find_close_names_in, Error};
 use lexer::Span;
 use y86_disasm::{disassemble_to_string, name_register};
@@ -276,7 +277,15 @@ pub struct RegisterBank {
     stall_signal: String,
     bubble_signal: String,
 }
+impl RegisterBank {
+    pub fn get_signal(&self) -> Vec<(String, String, WireWidth)> {
+        return self.signals.clone()
+    }
+    pub fn get_label(&self) -> String {
             return self.label.clone()
+        }
+
+}
 
 // interpreter representation of a program
 #[derive(Debug,Clone)]
@@ -778,6 +787,22 @@ pub fn get_all_wire_assignments(&self)->Vec<Wireassign>
 pub fn get_all_reg(&self)-> Vec<RegisterBank>{
 
     return self.register_banks.clone();
+}
+pub fn print_all_registers(&self){
+    for register in self.register_banks.clone(){
+        self.print_register(register);
+    }
+fn print_register(&self,reg: RegisterBank)
+{
+
+    println!("{}",reg.label );
+    for sig in reg.signals
+    {
+
+        println!(" the in signal is {} and the out signal is {}",sig.0,sig.1 );
+
+    }
+
 }
 pub fn label_wires(&self) -> Vec<WiretagMarker>
      {
@@ -1493,6 +1518,11 @@ impl RunningProgram {
     }
     fn get_all_reg(&self)->Vec<RegisterBank>{
         return self.program.get_all_reg()
+    }
+    pub fn print_all_registers(&self)
+    {
+
+        self.program.print_all_registers();
     }
     pub fn parse_file_non_pipeline(&self) -> (String,String,Vec<WiretagMarker>, Vec<Wireassign>,Vec<FakeMux>, Vec<RegisterBank>) {
         let full_pc:(String,String)=self.get_full_pc();
