@@ -135,6 +135,7 @@ fn main_real() -> Result<bool, Error> {
         }
         running_program.print_all_registers();
         running_program.print_all_muxes();
+        running_program.print_all_wire_assignments();
         return Ok(true);
     }
     if free_args.len() < 2 || free_args.len() > 3 {

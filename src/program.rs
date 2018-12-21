@@ -582,6 +582,33 @@ fn check_double_declare<'a, 'b>(errors: &'b mut Vec<Error>, name: &'a str, span:
 }
 
 #[derive(Debug,Clone)]
+pub struct WiretagMarker {
+    low: u8,
+    high: u8,
+    from: String, 
+    to: String,  
+
+}
+
+impl WiretagMarker {
+    pub fn new(l: u8,h: u8,f: String, t:String) -> WiretagMarker{
+        WiretagMarker{low:l,high:h,from:f, to:t}
+    }
+
+    pub fn get_from(&self) -> String {
+        return self.from.clone()
+    }
+    pub fn get_to(&self) -> String {
+        return self.to.clone()
+    }
+    pub fn get_low(&self) -> u8 {
+        return self.low.clone()
+    }
+    pub fn get_high(&self) -> u8 {
+        return self.high.clone()
+    }
+}
+#[derive(Debug,Clone)]
 pub struct FakeMux {
     pub out: String,
     pub values: Vec<String>,
@@ -594,6 +621,21 @@ impl FakeMux {
     pub fn add_value(&mut self,ex: String)
     {
         self.values.push(ex.clone());
+    }
+}
+#[derive(Debug,Clone)]
+pub struct Wireassign {
+    pub left: String,
+    pub right: Vec<String>,
+}
+impl Wireassign {
+    pub fn new(s: String) -> Wireassign{
+       Wireassign{left:s,right:Vec::new()}
+        
+    }
+    pub fn add_string(&mut self,ex: String)
+    {
+        self.right.push(ex.clone());
     }
 }
 impl Program {
@@ -1538,6 +1580,35 @@ impl RunningProgram {
 
         return self.program.get_all_wire_assignments();
     }
+    pub fn print_all_wire_assignments(&self)
+    {
+        let temp=self.get_all_wire_assignments();
+        for w_a in temp{
+            let mut temp_str= String::new();
+            if w_a.right.len()==1 {
+                temp_str.push_str(w_a.left.as_str());
+                temp_str.push_str("=");
+                temp_str.push_str(w_a.right[0].as_str());
+            }
+            if w_a.right.len()==2 {
+                temp_str.push_str(w_a.left.as_str());
+                temp_str.push_str("=");
+                temp_str.push_str(w_a.right[0].as_str());
+                temp_str.push_str(w_a.right[1].as_str());
+
+                
+            }
+            if w_a.right.len()==3 {
+                temp_str.push_str(w_a.left.as_str());
+                temp_str.push_str("=");
+                temp_str.push_str(w_a.right[0].as_str());
+                temp_str.push_str(w_a.right[1].as_str());
+                temp_str.push_str(w_a.right[2].as_str());
+                
+            }
+
+            println!("{}",temp_str );
+        }
 
     fn get_full_pc(&self)-> (String,String){
         let pc = self.program.get_pc();
