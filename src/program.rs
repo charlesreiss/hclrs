@@ -581,6 +581,21 @@ fn check_double_declare<'a, 'b>(errors: &'b mut Vec<Error>, name: &'a str, span:
     wire_decl_spans.insert(name, span);
 }
 
+#[derive(Debug,Clone)]
+pub struct FakeMux {
+    pub out: String,
+    pub values: Vec<String>,
+}
+impl FakeMux {
+    pub fn new(s: String) -> FakeMux{
+       FakeMux{out:s,values:Vec::new()}
+        
+    }
+    pub fn add_value(&mut self,ex: String)
+    {
+        self.values.push(ex.clone());
+    }
+}
 impl Program {
 pub fn bin_op_to_string(&self,boc:BinOpCode) -> String
 {
@@ -1505,6 +1520,19 @@ impl RunningProgram {
     pub fn get_all_muxes(&self)->Vec<FakeMux>{
 
         return self.program.get_all_mux();
+    }
+    pub fn print_all_muxes(&self){
+        let temp=self.get_all_muxes();
+        for fm in temp{
+            println!("output of the mux goes to {}", fm.out);
+            println!("the possible values are");
+            for val in fm.values{
+                print!(" {} ", val );
+            }
+            println!("");
+
+        }
+
     }
     fn get_all_wire_assignments(&self)->Vec<Wireassign>{
 

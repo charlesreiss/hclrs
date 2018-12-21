@@ -134,6 +134,7 @@ fn main_real() -> Result<bool, Error> {
            println!("the wire {} is gotten from wire  {} and bytes {} to {}", wiretag_mark.get_to(),wiretag_mark.get_from(),wiretag_mark.get_low(),wiretag_mark.get_high()); 
         }
         running_program.print_all_registers();
+        running_program.print_all_muxes();
         return Ok(true);
     }
     if free_args.len() < 2 || free_args.len() > 3 {
