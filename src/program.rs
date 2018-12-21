@@ -581,6 +581,7 @@ fn check_double_declare<'a, 'b>(errors: &'b mut Vec<Error>, name: &'a str, span:
     wire_decl_spans.insert(name, span);
 }
 
+#[derive(Debug,Clone)]
 pub struct LabelHolder {
     labels: Vec<WiretagMarker>  
 
