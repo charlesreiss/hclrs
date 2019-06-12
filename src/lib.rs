@@ -13,6 +13,7 @@ mod lexer;
 mod io;
 #[cfg(test)]
 mod tests;
+mod drawing;
 
 use std::path::Path;
 use lexer::Lexer;
@@ -23,7 +24,7 @@ use std::panic::catch_unwind;
 pub use errors::Error;
 pub use program::{Program, RunningProgram, RunOptions};
 pub use io::FileContents;
-
+pub use drawing::Drawingtool;
 pub fn read_y86_hcl(path: &Path) -> Result<FileContents, Error> {
     FileContents::new_from_file_with_preamble(program::Y86_PREAMBLE, path)
 }

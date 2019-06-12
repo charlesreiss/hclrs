@@ -1,14 +1,16 @@
 extern crate env_logger;
+
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Write, stdin, stdout, stderr};
 use std::path::Path;
 
+
 extern crate hclrs;
 extern crate getopts;
 
 use hclrs::*;
-
+//use hclrs::drawing::Drawingtool;
 use getopts::Options;
 
 fn main() {
@@ -53,6 +55,8 @@ fn print_usage(program_name: &str, opts: Options) {
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+    
+
 fn main_real() -> Result<bool, Error> {
     let args: Vec<String> = env::args().collect();
     let program_name = args[0].clone();
@@ -65,6 +69,10 @@ fn main_real() -> Result<bool, Error> {
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("i", "interactive", "prompt after each cycle");
     opts.optflag("", "trace-assignments", "show assignments in the order they are simulated");
+    opts.optflag("", "parse-file", "parse hcl file ");
+    opts.optflag("", "dump-everything", "dump all ");
+    opts.optflag("", "output-dot1", "output gv1 ");
+    opts.optflag("", "output-dot2", "output gv2 ");
     opts.optflag("", "version", "print version number");
     let parsed_opts = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -94,6 +102,10 @@ fn main_real() -> Result<bool, Error> {
         run_options.set_prompt(Box::new(press_enter));
     }
     let check_only = parsed_opts.opt_present("c");
+    let parse_file = parsed_opts.opt_present("parse-file");
+    let dump_everything = parsed_opts.opt_present("dump-everything");
+    let out_dot1 = parsed_opts.opt_present("output-dot1");
+    let out_dot2 = parsed_opts.opt_present("output-dot2");
     let free_args = parsed_opts.free;
     if free_args.len() < 1 {
         print_usage(&program_name, opts);
@@ -122,6 +134,34 @@ fn main_real() -> Result<bool, Error> {
         };
     if check_only {
         println!("syntax OK");
+        return Ok(true);
+    }
+    if dump_everything  {
+        
+       println!("{:#?}",running_program );
+        
+        return Ok(true);
+    }
+    if out_dot1{
+        let draw_tool:Drawingtool=running_program.get_drawing_tool(false);
+        draw_tool.start(false);
+        return Ok(true);
+    }
+    if out_dot2{
+        let draw_tool:Drawingtool=running_program.get_drawing_tool(true);
+        draw_tool.start(true);
+        return Ok(true);
+    }
+    if parse_file  {
+        
+        let t = running_program.parse_file_non_pipeline();
+        println!("output assigned to pc is {} and the register with this wire is {}",t.0,t.1 );
+        for wiretag_mark in t.2{
+           println!("the wire {} is gotten from wire  {} and bytes {} to {}", wiretag_mark.get_to(),wiretag_mark.get_from(),wiretag_mark.get_low(),wiretag_mark.get_high()); 
+        }
+        running_program.print_all_registers();
+        running_program.print_all_muxes();
+        running_program.print_all_wire_assignments();
         return Ok(true);
     }
     if free_args.len() < 2 || free_args.len() > 3 {
