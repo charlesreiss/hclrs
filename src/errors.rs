@@ -78,6 +78,7 @@ pub enum Error {
     RegisterDeclaredWithWire(Span),
     NoMuxDefaultOption(SpannedExpr),
     MultipleMuxDefaultOption(SpannedExpr),
+    UnreachableOptions(SpannedExpr),
     EmptyFile(),
     UnparseableLine(String), // .yo input -- FIXME: rename
     InvalidToken(Loc),
@@ -471,6 +472,11 @@ impl Error {
                 write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
                 error_continue(output, "(using constants instead of the result of comparing wires to constants?)")?;
             }
+            Error::UnreachableOptions(ref expr) => {
+                error(output, "Mux (case expression) has at least one case that will never be reached:")?;
+                write!(output, "{}", contents.show_region(expr.span.0, expr.span.1))?;
+                error_continue(output, "(put cases after a default case?)")?;
+            }
             Error::InvalidConstant(ref span) => {
                 error(output, "Constant value is out of range:")?;
                 write!(output, "{}", contents.show_region(span.0, span.1))?;
@@ -632,6 +638,7 @@ impl error::Error for Error {
             Error::RegisterDeclaredWithWire(_) => "register declared with 'wire', probably",
             Error::NoMuxDefaultOption(_) => "no default option for mux",
             Error::MultipleMuxDefaultOption(_) => "multiple default option for mux",
+            Error::UnreachableOptions(_) => "default case in middle of mux",
             Error::LexicalError(_) => "unrecognized token",
             Error::EmptyFile() => "empty input file",
             Error::UnparseableLine(_) => "unparseable line in input file",

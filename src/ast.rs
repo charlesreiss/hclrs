@@ -19,6 +19,8 @@ const STRICT_WIDTHS_BOOLEAN: bool = cfg!(feature="strict-boolean-ops");
 const REQUIRE_MUX_DEFAULT: bool = cfg!(feature="require-mux-default");
 // *  disallow multiple default options for MUXes, which usually means using a constant instaed of comparing to it
 const DISALLOW_MULTIPLE_MUX_DEFAULT: bool = cfg!(feature="disallow-multiple-mux-default");
+// *  dis
+const DISALLOW_UNREACHABLE_OPTIONS: bool = cfg!(feature="disallow-unreachable-options");
 
 
 #[derive(Clone,Copy,Debug,Eq,PartialEq,PartialOrd,Ord)]
@@ -438,8 +440,14 @@ impl SpannedExpr {
                 let mut all_widths = Vec::new();
                 let mut seen_always_true = false;
                 let mut seen_always_true_twice = false;
+                let mut seen_unreachable_options = false; // to detect when there is a default in middle
                 for option in options {
                     option.condition.get_width_and_check(widths, constants)?;
+                    // if there is another option when seen_always_true has already been marked true
+                    // then there is at least 1 unreachable option
+                    if seen_always_true {
+                        seen_unreachable_options = true;
+                    }
                     if option.condition.always_true(&constants) {
                         if seen_always_true {
                             seen_always_true_twice = true;
@@ -457,6 +465,9 @@ impl SpannedExpr {
                 }
                 if DISALLOW_MULTIPLE_MUX_DEFAULT && seen_always_true_twice {
                     return Err(Error::MultipleMuxDefaultOption(self.clone()));
+                }
+                if DISALLOW_UNREACHABLE_OPTIONS && seen_unreachable_options { // should i include an option to turn this off?
+                    return Err(Error::UnreachableOptions(self.clone()));
                 }
                 match maybe_width {
                     Some(width) => Ok(width),
