@@ -19,7 +19,7 @@ const STRICT_WIDTHS_BOOLEAN: bool = cfg!(feature="strict-boolean-ops");
 const REQUIRE_MUX_DEFAULT: bool = cfg!(feature="require-mux-default");
 // *  disallow multiple default options for MUXes, which usually means using a constant instaed of comparing to it
 const DISALLOW_MULTIPLE_MUX_DEFAULT: bool = cfg!(feature="disallow-multiple-mux-default");
-// *  dis
+// *  disallow options after a default option in muxes because those options will never be reached
 const DISALLOW_UNREACHABLE_OPTIONS: bool = cfg!(feature="disallow-unreachable-options");
 
 
