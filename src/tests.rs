@@ -11,10 +11,10 @@ use std::env;
 use std::fs::{File, read_dir};
 use std::io::{sink, Read, BufReader};
 use std::path::Path;
-use std::sync::{Once, ONCE_INIT};
+use std::sync::Once;
 extern crate env_logger;
 
-static TEST_LOGGER_ONCE: Once = ONCE_INIT;
+static TEST_LOGGER_ONCE: Once = Once::new();
 
 type ParseErrorType<'input> = ParseError<usize, Tok<'input>, Error>;
 type ErrorRecoveryType<'input> = ErrorRecovery<usize, Tok<'input>, Error>;

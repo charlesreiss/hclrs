@@ -1054,7 +1054,7 @@ pub struct RunOptions {
     show_registers_and_memory: bool,
     show_disassembly: bool,
     timeout: u32,
-    prompt: Option<Box<Fn() -> ()>>
+    prompt: Option<Box<dyn Fn() -> ()>>
 }
 
 impl Debug for RunOptions {
@@ -1111,7 +1111,7 @@ impl RunOptions {
         self.timeout = new_timeout;
     }
 
-    pub fn set_prompt(&mut self, new_prompt: Box<Fn() -> ()>) {
+    pub fn set_prompt(&mut self, new_prompt: Box<dyn Fn() -> ()>) {
         self.prompt = Some(new_prompt);
     }
 }

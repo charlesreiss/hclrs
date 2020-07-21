@@ -178,7 +178,7 @@ impl<'input> Lexer<'input> {
                         }
                     }
                 }
-                '0' ... '9' => {
+                '0' ..= '9' => {
                     self.unget();
                     let (start, num, end) = self.get_while(i, is_decimal_char);
                     match u128::from_str_radix(&num, 10) {
@@ -245,11 +245,11 @@ fn is_hexadecimal_char(c: char) -> bool {
 }
 
 fn is_decimal_char(c: char) -> bool {
-    (c >= '0' && c <= '9')
+    c >= '0' && c <= '9'
 }
 
 fn is_binary_char(c: char) -> bool {
-    (c >= '0' && c <= '1')
+    c >= '0' && c <= '1'
 }
 
 fn is_not_newline(c: char) -> bool {

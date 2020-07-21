@@ -559,7 +559,7 @@ impl SpannedExpr {
                 let mut result: WireValue = WireValue::new(0);
                 for ref option in options {
                     if option.condition.evaluate(wires)?.is_true() {
-                        result = try!(option.value.evaluate(wires));
+                        result = option.value.evaluate(wires)?;
                         break;
                     }
                 }
