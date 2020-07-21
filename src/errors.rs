@@ -572,15 +572,15 @@ impl<'input> From<ParseErrorType<'input>> for Error {
         match parse_error {
             ParseError::InvalidToken { location } => Error::InvalidToken(location),
             ParseError::UnrecognizedToken { token, expected } => {
-                match token {
-                    Some(tuple) => Error::UnrecognizedToken {
-                            location: (tuple.0, tuple.2),
-                            expected: expected,
-                        },
-                    None => Error::UnrecognizedToken {
-                            location: (usize::max_value(), usize::max_value()),
-                            expected: expected
-                        },
+                Error::UnrecognizedToken {
+                    location: (token.0, token.2),
+                    expected: expected,
+                }
+            },
+            ParseError::UnrecognizedEOF { location, expected } => {
+                Error::UnrecognizedToken {
+                    location: (location, location+1),
+                    expected: expected
                 }
             },
             ParseError::ExtraToken { token } => Error::ExtraToken((token.0, token.2)),

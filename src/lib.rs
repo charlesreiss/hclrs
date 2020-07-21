@@ -2,10 +2,11 @@
 extern crate log;
 extern crate env_logger;
 
+#[macro_use]
 extern crate lalrpop_util;
+lalrpop_mod!(pub parser);
 
 mod y86_disasm;
-mod parser;
 mod ast;
 mod program;
 mod errors;
