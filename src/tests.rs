@@ -334,7 +334,7 @@ fn simple_program() {
     let mut errors = Vec::new();
     let statements = parse_Statements_str(&mut errors,
         "const x = 42; wire y : 32; wire z : 32;
-         z = [x > 43: 0; x < 43: y << 3; x == 43: 0]; y = x * 2;").unwrap();
+         z = [x > 43: 0; x < 43: y << 3; x == 43: 0; 1: 0]; y = x * 2;").unwrap();
     debug!("statements are {:?}", statements);
     let program = Program::new(statements, vec!()).unwrap();
     let mut running_program = RunningProgram::new(program, 0, 0);
