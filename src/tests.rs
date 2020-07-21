@@ -1840,3 +1840,18 @@ fn usage_and_assignment_of_undeclared_gives_both_errors() {
     assert!(message.contains("in expression"));
     assert!(!message.contains("fixed"));  // message should not mention fixed functionality
 }
+
+#[test]
+#[cfg(feature="disallow-unreachable-options")]
+fn disallow_unreachable_mux_error() {
+    init_logger();
+    let message = get_errors_for("
+        wire Foo: 32, bar: 32;
+        Foo = [ bar > 32: 1; 1 : 2; bar < 32: 3 ];
+        pc = 0;
+        bar = i10bytes[0..32];
+        Stat = STAT_AOK;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("has at least one case that will never be reached"));
+}
