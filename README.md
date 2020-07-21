@@ -35,7 +35,8 @@ HCLRS supports several feature flags to control how picky its language is:
 *  `strict-boolean-ops` (enabled by default): require arguments for `&&`, `||`, etc. to have width 1 bit or no width
 *  `strict-wire-widths-binary` (disabled by default): require arguments for `+`, `-`, etc. to have the same width (or any one to have no width)
 *  `require-mux-default` (enabled by default): require every case expression ("MUX") to have a default case of the form `1: value`
-*  `disallow-multiple-mux-default` (eanbled by default): require every case expression to not have multiple defaults. This catches errors where constants are used instead of comparing a wire to a constant (like `[ REG_NONE: 0; 1 : reg_outputA; ]` instead of `[ some_signal == REG_NONE : 0; 1 : reg_outputA; ]`
+*  `disallow-multiple-mux-default` (enabled by default): require every case expression to not have multiple defaults. This catches errors where constants are used instead of comparing a wire to a constant (like `[ REG_NONE: 0; 1 : reg_outputA; ]` instead of `[ some_signal == REG_NONE : 0; 1 : reg_outputA; ]`
+*  `disallow-unreachable-options` (enabled by default): give an error if a case expression has a case after a case which is always true
 
 You can build a version of HCLRS with these all disabled using something like:
 
