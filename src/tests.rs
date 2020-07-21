@@ -334,7 +334,7 @@ fn simple_program() {
     let mut errors = Vec::new();
     let statements = parse_Statements_str(&mut errors,
         "const x = 42; wire y : 32; wire z : 32;
-         z = [x > 43: 0; x < 43: y << 3; x == 43: 0; 1: 0]; y = x * 2;").unwrap();
+         z = y << 3; y = x * 2;").unwrap();
     debug!("statements are {:?}", statements);
     let program = Program::new(statements, vec!()).unwrap();
     let mut running_program = RunningProgram::new(program, 0, 0);
@@ -346,6 +346,7 @@ fn simple_program() {
     expect_values.insert(String::from("z"), WireValue::from_decimal("672").as_width(WireWidth::from(32)));
     assert_eq!(running_program.values(), &expect_values);
 }
+
 
 #[test]
 fn program_registers() {
@@ -412,6 +413,32 @@ fn program_registers_bubble() {
     assert_eq!(running_program.values().get("x_a"), Some(&WireValue::from_decimal("3").as_width(WireWidth::from(32))));
 }
 
+#[test]
+fn program_registers_and_mux() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "register xY { a: 32 = 42; };
+         wire y : 32; wire z : 32;
+         z = [Y_a > 43: 0; Y_a < 43: y << 3; Y_a == 43: 0; 1: 0];
+         y = Y_a * 2;
+         x_a = Y_a;").unwrap();
+    let program = Program::new(statements, vec!()).unwrap();
+    assert!(program.defaulted_wires().contains("stall_Y"));
+    assert!(program.defaulted_wires().contains("bubble_Y"));
+    let mut running_program = RunningProgram::new(program, 0, 0);
+    let mut expect_values = WireValues::new();
+    expect_values.insert(String::from("Y_a"), WireValue::from_decimal("42").as_width(WireWidth::from(32)));
+    expect_values.insert(String::from("x_a"), WireValue::from_decimal("42").as_width(WireWidth::from(32)));
+    expect_values.insert(String::from("y"), WireValue::from_decimal("84").as_width(WireWidth::from(32)));
+    expect_values.insert(String::from("z"), WireValue::from_decimal("672").as_width(WireWidth::from(32)));
+    expect_values.insert(String::from("stall_Y"), WireValue::from_decimal("0").as_width(WireWidth::from(1)));
+    expect_values.insert(String::from("bubble_Y"), WireValue::from_decimal("0").as_width(WireWidth::from(1)));
+    running_program.step().unwrap();
+    assert_eq!(running_program.values(), &expect_values);
+    running_program.step().unwrap();
+    assert_eq!(running_program.values(), &expect_values);
+}
 
 #[test]
 fn memory_program() {
