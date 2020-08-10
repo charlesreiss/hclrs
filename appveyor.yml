@@ -45,7 +45,7 @@ deploy:
   # - Encrypt it. Go to https://ci.appveyor.com/tools/encrypt
   # - Paste the output down here
   auth_token:
-    secure: Mw814yZqgY5CnobGQNZItm4c80NawWS7HeAjpsGJ/bL4kcoKy8KTLrFj0l66ouxr
+    secure: iObny895Xb+30/gAW3sznBljlj4NSvi1wfHhW484BnnhgcwpC34nxaEG0iBsJnQR
   description: ''
   on:
     RUST_VERSION: stable
@@ -67,5 +67,5 @@ notifications:
     on_build_success: false
 
 # Building is done in the test phase, so we disable Appveyor's build phase.
-build: false
+build: off
 
