@@ -15,20 +15,21 @@ disallow-unreachable-options = []
 
 [profile.release]
 lto = true
+debug = true
 
 # Parser runtime library
 [dependencies.lalrpop-util]
-version = "0.19.0"
+version = "0.19.5"
 
 # Parser library
 [build-dependencies.lalrpop]
-version = "0.19.0"
+version = "0.19.5"
 
 [dependencies.log]
 version = "0.4.3"
 
 [dependencies.env_logger]
-version = "0.7.1"
+version = "0.8.3"
 
 [dependencies.getopts]
 version = "0.2.18"
