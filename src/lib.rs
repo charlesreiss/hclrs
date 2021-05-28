@@ -38,6 +38,7 @@ pub fn parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
         },
     }
 }
+
 fn internal_parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
     let mut errors = Vec::new();
     let lexer = Lexer::new_for_file(contents);
