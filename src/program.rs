@@ -12,6 +12,9 @@ use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use std::io::{BufRead, Write, sink};
 
+#[cfg(target_arch="wasm32")]
+use wasm_bindgen::prelude::*;
+
 struct Graph<T> {
     edges: HashMap<T, HashSet<T>>,
     edges_inverted: HashMap<T, HashSet<T>>,
@@ -278,6 +281,7 @@ pub struct RegisterBank {
 }
 
 // interpreter representation of a program
+#[cfg_attr(target_arch="wasm32",wasm_bindgen)]
 #[derive(Debug,Clone)]
 pub struct Program {
     constants: WireValues,
@@ -1046,6 +1050,7 @@ impl Memory {
     }
 }
 
+#[cfg_attr(target_arch="wasm32",wasm_bindgen)]
 pub struct RunOptions {
     trace_assignments: bool,
     trace_fixed_functionality: bool,
@@ -1086,6 +1091,7 @@ impl Default for RunOptions {
     }
 }
 
+#[cfg_attr(target_arch="wasm32",wasm_bindgen)]
 impl RunOptions {
     pub fn set_quiet(&mut self) {
         self.show_wire_values = false;
@@ -1110,12 +1116,14 @@ impl RunOptions {
     pub fn set_timeout(&mut self, new_timeout: u32) {
         self.timeout = new_timeout;
     }
-
+    
+    #[cfg(not(target_arch="wasm32"))]
     pub fn set_prompt(&mut self, new_prompt: Box<dyn Fn() -> ()>) {
         self.prompt = Some(new_prompt);
     }
 }
 
+#[cfg_attr(target_arch="wasm32",wasm_bindgen)]
 #[derive(Debug)]
 pub struct RunningProgram {
     program: Program,

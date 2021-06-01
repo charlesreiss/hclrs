@@ -6,6 +6,10 @@ use std::str;
 
 use errors::Error;
 
+#[cfg(target_arch="wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg_attr(target_arch="wasm32",wasm_bindgen)]
 pub struct FileContents {
     data: String,
     filenames: Vec<(usize, String)>,

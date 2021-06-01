@@ -1,7 +1,6 @@
 extern crate env_logger;
 use std::env;
-use std::fs::File;
-use std::io::{BufReader, Write, stdin, stdout, stderr};
+use std::io::{Write, stdin, stdout, stderr};
 use std::path::Path;
 
 extern crate hclrs;
@@ -31,16 +30,6 @@ fn press_enter() {
     let mut input = String::new();
     println!("(press enter to continue)");
     stdin().read_line(&mut input).unwrap();
-}
-
-fn run_y86<W: Write>(mut running_program: RunningProgram, yo_path: &Path,
-           run_options: RunOptions, out: &mut W) -> Result<(), Error> {
-    let mut yo_reader = BufReader::new(File::open(yo_path)?);
-    running_program.load_memory_y86(&mut yo_reader)?;
-    running_program.set_options(run_options);
-    running_program.run(out)?;
-    print!("{}", running_program.dump_y86_str());
-    Ok(())
 }
 
 fn print_usage(program_name: &str, opts: Options) { 

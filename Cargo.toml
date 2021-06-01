@@ -33,3 +33,10 @@ version = "0.8.3"
 
 [dependencies.getopts]
 version = "0.2.18"
+
+[target.'cfg(target_arch="wasm32")'.dependencies]
+wasm-bindgen = { "version" = "0.2.74", features = ["serde-serialize"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

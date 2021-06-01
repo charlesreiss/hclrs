@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "webpack": "^5.38.1"
+  },
+  "devDependencies": {
+    "webpack-cli": "^4.7.0",
+    "webpack-dev-server": "^3.11.2"
+  },
+  "private": "true",
+  "scripts": {
+    "build": "webpack",
+    "start:dev": "webpack serve --config webpack.config.js --progress"
+  }
+}
