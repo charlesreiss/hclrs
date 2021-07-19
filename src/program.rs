@@ -15,6 +15,10 @@ use std::io::{BufRead, Write, sink};
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
 
+use serde_json::{Value as JsonValue};
+use serde_json::json;
+
+
 struct Graph<T> {
     edges: HashMap<T, HashSet<T>>,
     edges_inverted: HashMap<T, HashSet<T>>,
@@ -291,6 +295,26 @@ pub struct Program {
     // wires which exist, but only ever have a default
     // value and should not be displayed in debugging output
     defaulted_wires: HashSet<String>,
+}
+
+#[cfg(feature="json")]
+fn register_bank_to_json(bank: &RegisterBank) -> JsonValue {
+    json!({
+        "label": bank.label,
+        "stall_signal": bank.stall_signal,
+        "bubble_signal": bank.bubble_signal,
+        "inputs": bank.signals.iter().map(|x| x.0.as_str()).collect::<Vec<&str>>(),
+        "outputs": bank.signals.iter().map(|x| x.1.as_str()).collect::<Vec<&str>>(),
+    })
+}
+
+#[cfg(feature="json")]
+fn wire_values_to_json(wire_values: &WireValues) -> JsonValue {
+    let mut result: HashMap<String, String> = HashMap::new();
+    for (name, value) in wire_values {
+        result.insert(name.clone(), format!("{:x}", value.bits));
+    }
+    json!(result)
 }
 
 
@@ -917,7 +941,9 @@ impl Memory {
 
     fn load_line_y86(&mut self, expect_loc: u64, line: &str) -> Result<u64, ()> {
         debug!("processing line from yo file {}", line);
-        if &line[0..2] == "0x" && &line[5..7] == ": " && &line[27..29] == " |" {
+        if line.len() < 3 || (&line[0..2] == "0x" && line.len() < 30) {
+            return Err(())
+        } else if &line[0..2] == "0x" && &line[5..7] == ": " && &line[27..29] == " |" {
             if let Ok(loc) = u64::from_str_radix(&line[2..5], 16) {
                 if loc != expect_loc {
                     debug!("loc {} from natural loc {}", loc, expect_loc);
@@ -1165,6 +1191,24 @@ impl RunningProgram {
             last_status: None,
             options: RunOptions::default(),
         }
+    }
+
+    #[cfg(feature="json")]
+    pub fn state_as_json(&self) -> JsonValue {
+        let mut memory_dump_str: Vec<u8> = Vec::new();
+        self.memory.dump_memory_y86(&mut memory_dump_str).unwrap();
+        json!({
+            "cycle": self.cycle,
+            "wires": wire_values_to_json(&self.values),
+            "constants": wire_values_to_json(&self.program.constants),
+            "memory_dump": String::from_utf8(memory_dump_str).unwrap(),
+            "last_status": self.last_status,
+            "registers": self.registers,
+            "register_banks": 
+                self.program.register_banks.iter().map(
+                    register_bank_to_json
+                ).collect::<Vec<JsonValue>>(),
+        })
     }
 
     pub fn set_options(&mut self, options: RunOptions) {

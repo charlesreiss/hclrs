@@ -11,6 +11,14 @@ extern crate wasm_bindgen;
 extern crate lalrpop_util;
 lalrpop_mod!(pub parser);
 
+#[cfg(feature="json")]
+extern crate serde_json;
+#[cfg(feature="json")]
+#[macro_use]
+extern crate serde;
+
+#[cfg(target_arch="wasm32")]
+extern crate console_error_panic_hook;
 
 mod y86_disasm;
 mod ast;
@@ -49,6 +57,7 @@ pub fn wasm_y86_hcl_to_file_contents(data: &str, filename: &str) -> FileContents
 #[cfg(target_arch="wasm32")]
 #[wasm_bindgen(catch)]
 pub fn wasm_parse_y86_hcl(contents: &FileContents) -> Result<Program, JsValue> {
+    console_error_panic_hook::set_once();
     match parse_y86_hcl(contents) {
         Ok(s) => return Ok(s),
         Err(e) => {
@@ -74,29 +83,36 @@ pub fn parse_y86_hcl(contents: &FileContents) -> Result<Program, Error> {
 }
 
 #[cfg(target_arch="wasm32")]
-fn convert_error_to_jsvalue(error: Error) -> JsValue {
+fn convert_error_to_jsvalue(error: Error, file_contents: &FileContents) -> JsValue {
     let mut error_u8s: Vec<u8> = Vec::new();
-    write!(&mut error_u8s, "{}", error).unwrap();
+    error.format_for_contents(&mut error_u8s, file_contents).unwrap();
     JsValue::from(String::from_utf8(error_u8s).unwrap())
 }
 
+#[cfg(target_arch="wasm32")]
+#[wasm_bindgen]
+pub fn wasm_new_run_options() -> RunOptions {
+    RunOptions::default()
+}
 
 #[cfg(target_arch="wasm32")]
 #[wasm_bindgen(catch)]
 pub fn wasm_setup_program_y86(
     program: Program,
     yo_contents: String,
-    run_options: RunOptions
+    run_options: RunOptions,
 ) -> Result<RunningProgram, JsValue> {
     let mut running_program = RunningProgram::new_y86(program);
+    debug!("test");
     running_program.set_options(run_options);
     let mut yo_reader = yo_contents.as_bytes();
     match running_program.load_memory_y86(&mut yo_reader) {
         Ok(_) => {},
         Err(e) => {
+            let empty_contents = FileContents::new_from_data("", "", "<unavailable>");
             let mut error_u8s: Vec<u8> = Vec::new();
-            write!(&mut error_u8s, "{}", e).unwrap();
-            return Err(JsValue::from(String::from_utf8(error_u8s).unwrap()));
+            e.format_for_contents(&mut error_u8s, &empty_contents).unwrap();
+            return Err(JsValue::from(String::from_utf8(error_u8s).expect("misformatted error")));
         }
     }
     Ok(running_program)
@@ -104,15 +120,41 @@ pub fn wasm_setup_program_y86(
 
 #[cfg(target_arch="wasm32")]
 #[wasm_bindgen(catch)]
-pub fn wasm_run_y86(mut running_program: RunningProgram) -> Result<String, JsValue> {
+pub fn wasm_run_y86(running_program: &mut RunningProgram, contents: &FileContents) -> Result<String, JsValue> {
     let mut out: Vec<u8> = Vec::new();
     match running_program.run(&mut out) {
         Ok(_) => {},
         Err(e) => {
-            return Err(convert_error_to_jsvalue(e));
+            return Err(convert_error_to_jsvalue(e, contents));
         }
     }
     Ok(String::from_utf8(out).unwrap())
+}
+
+#[cfg(target_arch="wasm32")]
+#[wasm_bindgen(catch)]
+pub fn wasm_step(running_program: &mut RunningProgram, contents: &FileContents) -> Result<String, JsValue> {
+    let mut out: Vec<u8> = Vec::new();
+    match running_program.step_with_output(&mut out) {
+        Ok(_) => {},
+        Err(e) => {
+            return Err(convert_error_to_jsvalue(e, contents));
+        }
+    }
+    Ok(String::from_utf8(out).unwrap())
+}
+
+#[cfg(target_arch="wasm32")]
+#[wasm_bindgen]
+pub fn wasm_dump_y86(running_program: &RunningProgram) -> String {
+    running_program.dump_y86_str()
+}
+
+#[cfg(target_arch="wasm32")]
+#[cfg(feature="json")]
+#[wasm_bindgen]
+pub fn wasm_running_program_state_as_json(running_program: &RunningProgram) -> JsValue {
+    JsValue::from_serde(&running_program.state_as_json()).unwrap()
 }
 
 pub fn run_y86<W: Write>(mut running_program: RunningProgram, yo_path: &Path,

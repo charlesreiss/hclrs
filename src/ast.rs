@@ -10,6 +10,9 @@ use std::str::FromStr;
 use lexer::Span;
 use errors::{find_close_names_in, Error};
 
+#[cfg(feature="json")]
+use serde::ser::{Serialize, Serializer};
+
 // if true:
 // *  require equality for non-bitwise, non-comparison binary ops; (otherwise, take maximum)
 const STRICT_WIDTHS_BINARY: bool = cfg!(feature="strict-wire-widths-binary");
@@ -27,6 +30,19 @@ const DISALLOW_UNREACHABLE_OPTIONS: bool = cfg!(feature="disallow-unreachable-op
 pub enum WireWidth {
     Bits(u8),
     Unlimited,
+}
+
+#[cfg(feature="json")]
+impl Serialize for WireWidth {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            WireWidth::Unlimited => serializer.serialize_i32(-1),
+            WireWidth::Bits(x) => serializer.serialize_i32((*x).into()),
+        }
+    }
 }
 
 impl From<usize> for WireWidth {
@@ -113,6 +129,7 @@ impl WireWidth {
 }
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
+#[cfg_attr(feature ="json",derive(Serialize))]
 pub struct WireValue {
     pub bits: u128,
     pub width: WireWidth

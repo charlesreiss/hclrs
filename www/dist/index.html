@@ -2,8 +2,54 @@
 <html>
     <head>
         <title>Test</title>
+    <style type="text/css">
+    .output { font-family: monospace; white-space: pre; }
+    .step-box { border: 2px solid black; padding: 1ex; }
+    #step-display { display: flex; align-items: start }
+    .value-table {
+        font-family: monospace; caption-side: top;
+        flex: 1; flex-wrap: wrap; flex-basis: content;
+        border: 2px grey solid;
+        flex-grow: 0;
+    }
+    .value-table caption { font-family: serif; font-size: 110%; }
+    </style>
     </head>
     <body>
         <script type="module" src="./bundle.js"></script>
+<input type="file" id="code-file"><label for="code-file">Upload .hcl file</label><br>
+<textarea id="code" rows=10 cols=80>
+Stat = STAT_HLT;
+pc = 0;
+</textarea>
+        <hr>
+<input type="file" id="memory-file"><label for="memory-file">Upload .yo file</label><br>
+<textarea id="memory" rows=10 cols=80>
+</textarea>
+        <hr>
+<button type="button" id="run-button">Run</button>
+<button type="button" id="start-button">Start</button>
+<button type="button" id="step-button">Step</button>
+<hr>
+<div class="step-box">
+<label id="step-slider-label" for="step-slider">At cycle <input type="number" id="current-step" disabled> of <span id="max-step">0</span>:</label>
+<div id="output" class="output">
+</div>
+<hr>
+<div id="step-display">
+    <table class="value-table" id="regfile-registers">
+        <caption>register&nbsp;file</caption>
+    </table> 
+    <table class="value-table" id="wires">
+        <caption>wire&nbsp;values</caption>
+    </table>
+</div>
+<div id="final-output" class="output">
+</div>
+</div>
+<hr>
+For debugging:<br>
+<div id="raw-history" class="output">
+</div>
     </body>
 </html>
