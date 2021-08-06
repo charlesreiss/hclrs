@@ -33,3 +33,6 @@ version = "0.8.3"
 
 [dependencies.getopts]
 version = "0.2.18"
+
+[dev-dependencies.regex]
+version = "1"

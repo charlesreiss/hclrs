@@ -12,7 +12,8 @@ use std::fs::{File, read_dir};
 use std::io::{sink, Read, BufReader};
 use std::path::Path;
 use std::sync::Once;
-extern crate env_logger;
+
+use regex::Regex;
 
 static TEST_LOGGER_ONCE: Once = Once::new();
 
@@ -1673,6 +1674,16 @@ fn error_wire_declared_in_register_bank() {
     assert!(message.contains("'wire' to declare"));
 }
 
+fn assert_regex_match(haystack: &str, needle: &str) {
+    let re = Regex::new(needle).unwrap();
+    assert!(
+        re.is_match(haystack),
+        "regular expression /{}/ matching in {}",
+        needle,
+        haystack
+    )
+}
+
 #[test]
 fn debug_output() {
     init_logger();
@@ -1692,10 +1703,107 @@ fn debug_output() {
     running_program.step_with_output(&mut result).unwrap();
     let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
     debug!("result is {:?}", result_as_string);
-    assert!(result_as_string.contains("foo_bar_baz_quux              0x00000042"));
-    assert!(result_as_string.contains("i10bytes          0x00000000000000000000"));
+    assert_regex_match(&result_as_string, &r"foo_bar_baz_quux\s+0x00000042");
+    assert_regex_match(&result_as_string, &r"i10bytes\s+0x00000000000000000000");
 }
 
+#[test]
+fn debug_output_no_groups() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "wire foo_bar_baz_quux : 32;
+        foo_bar_baz_quux = 0x42;
+        Stat = 0;
+        pc = 0;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options = RunOptions::default();
+    options.set_debug();
+    options.set_no_group_wire_values();
+    running_program.set_options(options);
+    let mut result: Vec<u8> = Vec::new();
+    running_program.step_with_output(&mut result).unwrap();
+    let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
+    debug!("result is {:?}", result_as_string);
+    assert!(result_as_string.contains(
+        "Values of wires:\n\
+         Wire                               Value\n\
+         foo_bar_baz_quux              0x00000042\n\
+         i10bytes          0x00000000000000000000\n\
+         pc                    0x0000000000000000\n\
+         Stat                                 0x0\n"));
+}
+
+#[test]
+fn debug_output_groups_1() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "wire foo_bar_baz_quux : 32;
+        foo_bar_baz_quux = 0x42;
+        Stat = 0;
+        pc = 0;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options = RunOptions::default();
+    options.set_debug();
+    running_program.set_options(options);
+    let mut result: Vec<u8> = Vec::new();
+    running_program.step_with_output(&mut result).unwrap();
+    let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
+    debug!("result is {:?}", result_as_string);
+    assert_regex_match(&result_as_string, &concat!(
+        r"Values of inputs to built-in components:\n",
+        r"pc\s+0x0000000000000000\n",
+        r"Stat\s+0x0\n\n",
+        r"Values of outputs of built-in components:\n",
+        r"i10bytes\s+0x00000000000000000000\n\n",
+        r"Values of other wires:\n",
+        r"foo_bar_baz_quux\s+0x00000042\n"));
+}
+
+#[test]
+fn debug_output_groups_2() {
+    init_logger();
+    let mut errors = Vec::new();
+    let statements = parse_Statements_str(&mut errors,
+        "wire foo_bar_baz_quux : 32;
+        foo_bar_baz_quux = 0x42;
+        register xY {
+            stuff : 17 = 0x1234;
+        }
+        x_stuff = 0x2345;
+        Stat = 0;
+        pc = 0;
+        ").unwrap();
+    let program = Program::new_y86(statements).unwrap();
+    let mut running_program = RunningProgram::new_y86(program);
+    let mut options = RunOptions::default();
+    options.set_debug();
+    running_program.set_options(options);
+    let mut result: Vec<u8> = Vec::new();
+    running_program.step_with_output(&mut result).unwrap();
+    let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
+    debug!("result is {:?}", result_as_string);
+    assert_regex_match(
+        &result_as_string,
+        concat!(
+            r"Values of inputs to built-in components:\n",
+            r"pc\s+0x0000000000000000\n",
+            r"Stat\s+0x0\n\n",
+            r"Values of outputs of built-in components:\n",
+            r"i10bytes\s+0x00000000000000000000\n\n",
+            r"Values of register bank signals:\n",
+            r"x_stuff\s+0x02345\n",
+            r"Y_stuff\s+0x01234\n\n",
+            r"Values of other wires:\n",
+            r"foo_bar_baz_quux\s+0x00000042\n"
+        )
+    );
+}
 
 #[test]
 fn debug_output_register() {
@@ -1719,9 +1827,9 @@ fn debug_output_register() {
     running_program.step_with_output(&mut result).unwrap();
     let result_as_string = String::from_utf8_lossy(result.as_slice()).into_owned();
     debug!("result is {:?}", result_as_string);
-    assert!(result_as_string.contains("Y_a                   0x00001234"));
-    assert!(result_as_string.contains("x_a                   0x00000042"));
-    assert!(result_as_string.contains("i10bytes  0x00000000000000000000"));
+    assert_regex_match(&result_as_string, r"Y_a\s+0x00001234");
+    assert_regex_match(&result_as_string, r"x_a\s+0x00000042");
+    assert_regex_match(&result_as_string, r"i10bytes\s+0x00000000000000000000");
     assert!(!result_as_string.contains("stall_Y"));
 }
 

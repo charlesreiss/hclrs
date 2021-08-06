@@ -277,6 +277,18 @@ pub struct RegisterBank {
     bubble_signal: String,
 }
 
+#[derive(Debug,Clone)]
+pub enum WireType {
+    Constant,
+    BuiltinInput,
+    BuiltinOutput,
+    RegisterBankInput,
+    RegisterBankOutput,
+    RegisterBankSpecial, // stall_X, bubble_X
+    Normal,
+}
+
+
 // interpreter representation of a program
 #[derive(Debug,Clone)]
 pub struct Program {
@@ -287,6 +299,10 @@ pub struct Program {
     // wires which exist, but only ever have a default
     // value and should not be displayed in debugging output
     defaulted_wires: HashSet<String>,
+
+    // wire type information for debugging output
+    // the actual use of the wire is determined by the action list
+    wire_to_type: HashMap<String, WireType>,
 }
 
 
@@ -590,12 +606,15 @@ impl Program {
         let mut register_banks_raw = Vec::new();
         let mut fixed_out_wires = HashSet::new();
         let mut register_in_spans = HashMap::new();
+        let mut wire_to_type = HashMap::new();
         let mut errors = Vec::new();
         for fixed in &fixed_functions {
             for ref in_wire in &fixed.in_wires {
+                wire_to_type.insert(in_wire.name.clone(), WireType::BuiltinInput);
                 wires.insert(in_wire.name.as_str(), in_wire.width);
             }
             for ref decl in &fixed.out_wire {
+                wire_to_type.insert(decl.name.clone(), WireType::BuiltinOutput);
                 wires.insert(decl.name.as_str(), decl.width);
                 fixed_out_wires.insert(decl.name.as_str());
             }
@@ -606,6 +625,7 @@ impl Program {
                     for ref decl in decls {
                         check_double_declare(&mut errors, decl.name.as_str(), decl.name_span,
                                         &mut wire_decl_spans, &wires);
+                        wire_to_type.insert(decl.name.clone(), WireType::Constant);
                         constants_raw.insert(decl.name.as_str(), &decl.value);
                     }
                 },
@@ -614,6 +634,7 @@ impl Program {
                         check_double_declare(&mut errors, decl.name.as_str(), decl.span,
                                         &mut wire_decl_spans, &wires);
                         wires.insert(decl.name.as_str(), decl.width);
+                        wire_to_type.insert(decl.name.clone(), WireType::Normal);
                         needed_wires.insert(decl.name.as_str());
                     }
                 },
@@ -711,6 +732,8 @@ impl Program {
                 debug!("{:?} is not assigned", bubble_signal);
                 defaulted_wires.insert(bubble_signal.clone());
             }
+            wire_to_type.insert(stall_signal.clone(), WireType::RegisterBankSpecial);
+            wire_to_type.insert(bubble_signal.clone(), WireType::RegisterBankSpecial);
             for register in &decl.registers {
                 let mut in_name = String::new();
                 let mut out_name = String::new();
@@ -720,6 +743,8 @@ impl Program {
                 out_name.push('_');
                 in_name.push_str(register.name.as_str());
                 out_name.push_str(register.name.as_str());
+                wire_to_type.insert(in_name.clone(), WireType::RegisterBankInput);
+                wire_to_type.insert(out_name.clone(), WireType::RegisterBankOutput);
                 let mut found_error = false;
                 // FIXME: redundant with code in resolve_constants()
                 for referenced in register.default.referenced_wires() {
@@ -850,6 +875,7 @@ impl Program {
             actions: actions,
             register_banks: register_banks,
             defaulted_wires: defaulted_wires,
+            wire_to_type: wire_to_type,
         })
     }
 
@@ -898,6 +924,10 @@ impl Program {
 
     pub fn defaulted_wires(&self) -> &HashSet<String> {
         return &self.defaulted_wires;
+    }
+
+    pub fn wire_to_type(&self) -> &HashMap<String, WireType> {
+        return &self.wire_to_type;
     }
 }
 
@@ -1050,6 +1080,7 @@ pub struct RunOptions {
     trace_assignments: bool,
     trace_fixed_functionality: bool,
     show_wire_values: bool,
+    group_wire_values: bool,
     show_register_banks_with_registers: bool,
     show_registers_and_memory: bool,
     show_disassembly: bool,
@@ -1076,6 +1107,7 @@ impl Default for RunOptions {
         RunOptions {
             trace_assignments: false,
             trace_fixed_functionality: false,
+            group_wire_values: true,
             show_wire_values: false,
             show_register_banks_with_registers: true,
             show_registers_and_memory: true,
@@ -1102,6 +1134,10 @@ impl RunOptions {
         self.show_wire_values = true;
     }
 
+    pub fn set_no_group_wire_values(&mut self) {
+        self.group_wire_values = false;
+    }
+
     pub fn set_trace(&mut self) {
         self.trace_fixed_functionality = true;
         self.trace_assignments = true;
@@ -1113,6 +1149,10 @@ impl RunOptions {
 
     pub fn set_prompt(&mut self, new_prompt: Box<dyn Fn() -> ()>) {
         self.prompt = Some(new_prompt);
+    }
+
+    pub fn set_trace_assignments(&mut self) {
+        self.trace_assignments = true;
     }
 }
 
@@ -1195,37 +1235,11 @@ impl RunningProgram {
         return name_register(i);
     }
 
-    fn dump_values<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        let mut keys: Vec<String> = self.values.keys().cloned().collect();
-        keys.sort_unstable_by(|a, b| a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()).then(a.cmp(&b)));
-        let mut max_name_len = 4;
-        let mut max_value_len = 3;
-        for key in &keys {
-            if self.program.constants.contains_key(key) {
-                continue
-            }
-            if self.program.defaulted_wires().contains(key) {
-                continue
-            }
-            let value = self.values.get(key).unwrap();
-            let value_width_bits = match value.width {
-                WireWidth::Unlimited => 64,
-                WireWidth::Bits(x) => x,
-            };
-            let value_width_len = (value_width_bits as usize + 3) / 4 + 2;
-            max_name_len = max(key.len(), max_name_len);
-            max_value_len = max(value_width_len, max_value_len);
-        }
-        debug!("max_value_len = {}; max_name_len = {};\n", max_value_len, max_name_len);
-        writeln!(w, "Values of wires:")?;
-        writeln!(w, "{:width$}  {:>value_width$}", "Wire", "Value", width=max_name_len, value_width=max_value_len)?;
-        for key in &keys {
-            if self.program.constants.contains_key(key) {
-                continue
-            }
-            if self.program.defaulted_wires().contains(key) {
-                continue
-            }
+    fn dump_wire_table_rows<W: Write>(&self,
+            w: &mut W,
+            max_name_len: usize, max_value_len: usize,
+            keys: &Vec<String>) -> Result<(), Error> {
+        for key in keys {
             let value = self.values.get(key).unwrap();
             let value_width_bits = match value.width {
                 WireWidth::Unlimited => 64,
@@ -1237,8 +1251,88 @@ impl RunningProgram {
                 value.bits, width=max_name_len, value_width_len=value_width_len,
                 extra_len=extra_len, empty="")?
         }
-
         Ok(())
+    }
+
+    fn find_table_widths(&self, keys: &Vec<String>) -> (usize, usize) {
+        /* large minimum widths so tables are usually not resized */
+        let mut max_name_len = 15;
+        let mut max_value_len = 22; /* 80/4 hexadecimal digits + "0x" */
+        for key in keys {
+            let value = self.values.get(key).unwrap();
+            let value_width_bits = match value.width {
+                WireWidth::Unlimited => 64,
+                WireWidth::Bits(x) => x,
+            };
+            let value_width_len = (value_width_bits as usize + 3) / 4 + 2;
+            max_name_len = max(key.len(), max_name_len);
+            max_value_len = max(value_width_len, max_value_len);
+        }
+        (max_name_len, max_value_len)
+    }
+
+    fn dump_wire_subtable<W: Write>(&self, w: &mut W, mut keys: Vec<String>, label: &str, header_p: bool) -> Result<(), Error> {
+        if keys.len() > 0 {
+            writeln!(w, "{}", label)?;
+            let (max_name_len, max_value_len) = self.find_table_widths(&keys);
+            if header_p {
+                writeln!(w, "{:width$}  {:>value_width$}",
+                         "Wire", "Value", width=max_name_len, value_width=max_value_len)?;
+            }
+            keys.sort_unstable_by(|a, b| a.to_ascii_uppercase().cmp(&b.to_ascii_uppercase()).then(a.cmp(&b)));
+            self.dump_wire_table_rows(w, max_name_len, max_value_len, &keys)?;
+            writeln!(w, "")?;
+        }
+        Ok(())
+    }
+    
+    fn dump_values_ungrouped<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+        let mut keys = Vec::new();
+        for key in self.values.keys() {
+            if self.program.constants.contains_key(key) {
+                continue
+            }
+            if self.program.defaulted_wires().contains(key) {
+                continue
+            }
+            keys.push(key.clone());
+        }
+        self.dump_wire_subtable(w, keys, "Values of wires:", true)?;
+        Ok(())
+    }
+
+    fn dump_values_grouped<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+        let mut keys_builtin_input = Vec::new();
+        let mut keys_builtin_output = Vec::new();
+        let mut keys_register_bank = Vec::new();
+        let mut keys_normal = Vec::new();
+        for key in self.values.keys() {
+            if self.program.defaulted_wires().contains(key) {
+                continue
+            }
+            match self.program.wire_to_type().get(key).unwrap_or(&WireType::Normal) {
+                WireType::Constant => { /* ignore */ },
+                WireType::BuiltinInput => keys_builtin_input.push(key.clone()),
+                WireType::BuiltinOutput => keys_builtin_output.push(key.clone()),
+                WireType::RegisterBankInput |
+                WireType::RegisterBankOutput |
+                WireType::RegisterBankSpecial => keys_register_bank.push(key.clone()),
+                _ => keys_normal.push(key.clone()),
+            }
+        }
+        self.dump_wire_subtable(w, keys_builtin_input, "Values of inputs to built-in components:", false)?;
+        self.dump_wire_subtable(w, keys_builtin_output, "Values of outputs of built-in components:", false)?;
+        self.dump_wire_subtable(w, keys_register_bank, "Values of register bank signals:", false)?;
+        self.dump_wire_subtable(w, keys_normal, "Values of other wires:", false)?;
+        Ok(())
+    }
+
+    fn dump_values<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+        if self.options.group_wire_values {
+            self.dump_values_grouped(w)
+        } else {
+            self.dump_values_ungrouped(w)
+        }
     }
 
     pub fn step(&mut self) -> Result<(), Error> {

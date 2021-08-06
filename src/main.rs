@@ -64,6 +64,7 @@ fn main_real() -> Result<bool, Error> {
     opts.optflag("t", "testing", "do not output custom register banks (for autograding)");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("i", "interactive", "prompt after each cycle");
+    opts.optflag("", "ungroup-debug-wires", "when showing wire values in debug output, do not group wires by category");
     opts.optflag("", "trace-assignments", "show assignments in the order they are simulated");
     opts.optflag("", "version", "print version number");
     let parsed_opts = match opts.parse(&args[1..]) {
@@ -92,6 +93,12 @@ fn main_real() -> Result<bool, Error> {
     }
     if parsed_opts.opt_present("i") {
         run_options.set_prompt(Box::new(press_enter));
+    }
+    if parsed_opts.opt_present("ungroup-debug-wires") {
+        run_options.set_no_group_wire_values();
+    }
+    if parsed_opts.opt_present("trace-assignemnts") {
+        run_options.set_trace_assignments();
     }
     let check_only = parsed_opts.opt_present("c");
     let free_args = parsed_opts.free;

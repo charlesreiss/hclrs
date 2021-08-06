@@ -15,6 +15,9 @@ mod io;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+extern crate regex;
+
 use std::path::Path;
 use lexer::Lexer;
 use lexer::LAST_LOC;
