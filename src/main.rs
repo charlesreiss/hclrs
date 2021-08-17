@@ -97,7 +97,7 @@ fn main_real() -> Result<bool, Error> {
     if parsed_opts.opt_present("ungroup-debug-wires") {
         run_options.set_no_group_wire_values();
     }
-    if parsed_opts.opt_present("trace-assignemnts") {
+    if parsed_opts.opt_present("trace-assignments") {
         run_options.set_trace_assignments();
     }
     let check_only = parsed_opts.opt_present("c");
