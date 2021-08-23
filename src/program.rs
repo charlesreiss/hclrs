@@ -1320,6 +1320,7 @@ impl RunningProgram {
                 _ => keys_normal.push(key.clone()),
             }
         }
+        writeln!(w, "")?;
         self.dump_wire_subtable(w, keys_builtin_input, "Values of inputs to built-in components:", false)?;
         self.dump_wire_subtable(w, keys_builtin_output, "Values of outputs of built-in components:", false)?;
         self.dump_wire_subtable(w, keys_register_bank, "Values of register bank signals:", false)?;
