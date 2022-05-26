@@ -5,7 +5,6 @@ rust:
 env:
   global:
   - CRATE_NAME=hclrs
-  - secure: qHgqv+bB+0uBgTkh1sQljde6Gi75tQa78L+dNExRdxYd0MhzHQSUkt48lwtlekl7rgznjabHFZBVXo1cMwpxTz/45DwT3TVZ1lneXi3PH8SSrN/OxfJSLilyB4GCDEweNJCQNZ5GwKe3hvhk92GugKEyKUcSCqP6BI+U+2gJCNUVq8qTAkQf8p+SoFBS0yeefpzYRh+Hu1EhUEBHcAKgWu1j7LcnU2K4JN8qNCL3S80YTeKKXad14ZBLuexevzwikYvZSrPuwbQH1KKl0YzWEhMBD/12lhgnZWDO6R0AuHr/4Xxt1vSQvj+sGsi/tAEcLYFFuh9GKqFbJITU2gYCrsFAHQj+JxmoTUSZWfILrt7dolPd/giU4q92rBUBweWFlyIgJ8qf+Z4zOGKvBy3dVkSJcVkYZ+dny0iuDOU7k+zoH15hXLUMhpvTcJaEkX0Izbs1RhdFqB2v13QHj63ZQ/RaTBYDWLA5O/BiG6AP01KVC2uFNlmE3rH1YDvJ5FqAGvt4BcsmWsP6TfPokexGwFeQLGl+MgYR3xuiQxTV+9ITla3MhmvimJZMlwr7Mf3AQQyKSZf82sfbiTBJNQjtDnyAHEShMoqz6D/RnL+e6ykxsILa+FFTZ7G+j0SC7yBMeK4sVCk+7oai0K3LRC2wd1doEs4pzw3XbBmDXIpDCGU=
 matrix:
   include:
   - env: TARGET=i686-unknown-linux-gnu
@@ -29,8 +28,6 @@ after_script: set +e
 before_deploy:
 - sh ci/before_deploy.sh
 deploy:
-  api_key:
-  - secure: qHgqv+bB+0uBgTkh1sQljde6Gi75tQa78L+dNExRdxYd0MhzHQSUkt48lwtlekl7rgznjabHFZBVXo1cMwpxTz/45DwT3TVZ1lneXi3PH8SSrN/OxfJSLilyB4GCDEweNJCQNZ5GwKe3hvhk92GugKEyKUcSCqP6BI+U+2gJCNUVq8qTAkQf8p+SoFBS0yeefpzYRh+Hu1EhUEBHcAKgWu1j7LcnU2K4JN8qNCL3S80YTeKKXad14ZBLuexevzwikYvZSrPuwbQH1KKl0YzWEhMBD/12lhgnZWDO6R0AuHr/4Xxt1vSQvj+sGsi/tAEcLYFFuh9GKqFbJITU2gYCrsFAHQj+JxmoTUSZWfILrt7dolPd/giU4q92rBUBweWFlyIgJ8qf+Z4zOGKvBy3dVkSJcVkYZ+dny0iuDOU7k+zoH15hXLUMhpvTcJaEkX0Izbs1RhdFqB2v13QHj63ZQ/RaTBYDWLA5O/BiG6AP01KVC2uFNlmE3rH1YDvJ5FqAGvt4BcsmWsP6TfPokexGwFeQLGl+MgYR3xuiQxTV+9ITla3MhmvimJZMlwr7Mf3AQQyKSZf82sfbiTBJNQjtDnyAHEShMoqz6D/RnL+e6ykxsILa+FFTZ7G+j0SC7yBMeK4sVCk+7oai0K3LRC2wd1doEs4pzw3XbBmDXIpDCGU=
   file_glob: true
   file: "$CRATE_NAME-$TRAVIS_TAG-$TARGET.*"
   on:
@@ -38,6 +35,8 @@ deploy:
     tags: true
   provider: releases
   skip_cleanup: true
+  api_key:
+    secure: rb8QaActaFjVM8Y4GbN0y3sgAhlcyjvEBrlWBQQ357WV/rnO5L6CUsFAcFL1gD4lY5HeetP6rHLV6EEE9gB1lJJOKBuboRgNuRUi5+T97bymArGobkTHLFVLqgGsDG8AC0UCVpq2gP8ws5B7pIdrcRViWZZ97QJ+RQtE1BG5tZknhZihMXH/AHEU70IV5GZBeoduQnKCAlT+vqaKXia9K9LRZ69zqc0RBtYxBZuWSSIoSrx48EO/BJbPFV2JXetjj84Q85LwyRRn92QgYLtIpSER7VvJFIZw16wTl0cOuYh9vjaXkE/tvYNS3O+7TQZb/JY7lxPR77Qg3UulLSpQr6jU6lo0bzSX3eGws6Fty7SIFROIx1f4jiKI00TI53Yq+756A3Dd7zBLludOTBIctPi58xBGLxS6VkkG5qzoFhDrtUrTyBZ5y7KA8zjfOv0DV2lIpf0EEykqANxFWJAr/8JxNna7acjJZBYMwBLUzBNii/Jr6fJgd1/s2MiS9xNtOBG2Mk8D48ykgDAhR7VZMdPAkFVRHC5ddLG08nm0PdhGLdB+klQY4jDAqbszOkagMoDNbvemlPLjYsBpJ7OOgOpFHKUay/2aM1ei2UUFoHgnFyaydknYD3mpsSCs1lQghJ7+dh2jypnZtCJyNrW/lH8KeqqJfPVSRweQw+83/EY=
 cache: cargo
 before_cache:
 - chmod -R a+r $HOME/.cargo
