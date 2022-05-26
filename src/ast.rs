@@ -617,6 +617,7 @@ impl SpannedExpr {
 
     pub fn apply_to_all<'a, 'b, F>(&'a self, func: &'b mut F) -> Result<(), Error>
             where F: FnMut(&'a Self) -> Result<(), Error> {
+        debug!("running on {:?}", self);
         func(self)?;
         match *self.expr {
             Expr::Constant(_) => {},
@@ -628,6 +629,7 @@ impl SpannedExpr {
                 inner.apply_to_all(func)?;
             },
             Expr::Mux(ref options) => {
+                debug!("checking {:?}", options);
                 for ref option in options {
                     option.condition.apply_to_all(func)?;
                     option.value.apply_to_all(func)?;
@@ -706,9 +708,10 @@ impl SpannedExpr {
         self.apply_to_all(&mut |item| {
             match *item.expr {
                 Expr::NamedWire(ref name) => {
+                    debug!("adding {:?}", name);
                     result.insert(name.as_str());
                 },
-                _ => {},
+                _ => {debug!("ignoring {:?}", *item);},
             }
             Ok(())
         }).unwrap();

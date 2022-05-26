@@ -465,8 +465,8 @@ fn assignments_to_actions<'a>(
                 debug!("processing {:?}", name);
                 match assignments.get(name) {
                     Some(expr) => {
+                        debug!("has assignment");
                         for in_name in expr.referenced_wires() {
-                            seen_undeclared.remove(&in_name);
                             assert!(covered.contains(&in_name));
                         }
                         if let Some(the_width) = widths.get(name) {
@@ -496,8 +496,10 @@ fn assignments_to_actions<'a>(
                         }
                     },
                     None => {
+                        debug!("no assignment");
                         match fixed_by_output.get(name) {
                             Some(fixed) => {
+                                debug!("fixed functionality");
                                 for in_name in &fixed.in_wires {
                                     assert!(covered.contains(in_name.name.as_str()));
                                 }
@@ -509,6 +511,7 @@ fn assignments_to_actions<'a>(
                                         errors.push(Error::UnsetWire(String::from(name), *span));
                                     },
                                     None => {
+                                        debug!("seen undeclared");
                                         seen_undeclared.insert(name);
                                     },
                                 }
@@ -519,10 +522,6 @@ fn assignments_to_actions<'a>(
                 covered.insert(name);
             }
             for name in seen_undeclared {
-                // FIXME: this is probably really an internal error
-                //        since any undeclared wire should either be fixed
-                //        functionality or have a use
-                // Assuming this is true, we should just be able to assert!() here
                 errors.push(Error::UnsetUndeclaredWire(String::from(name)));
             }
             if errors.len() > 0 {

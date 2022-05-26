@@ -1950,6 +1950,25 @@ fn usage_and_assignment_of_undeclared_gives_both_errors() {
 }
 
 #[test]
+fn unset_undeclared_wire_error() {
+    init_logger();
+    let message = get_errors_for("
+        wire a : 64;
+        wire b : 64;
+        wire c : 64;
+        pc = 42;
+        b = 0x1; c = 0x2;
+        a = [
+            b == 0x1: reg_inputE;
+            1: c;
+        ];
+        Stat = STAT_AOK;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("Wire 'reg_inputE' was read but never"));
+}
+
+#[test]
 #[cfg(feature="disallow-unreachable-options")]
 fn disallow_unreachable_mux_error() {
     init_logger();
