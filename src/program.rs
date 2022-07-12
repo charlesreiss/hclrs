@@ -175,8 +175,10 @@ pub enum Action {
 // psuedo-assignment for fixed functionality
 #[derive(Debug)]
 pub struct FixedFunction {
+    name: String,
     in_wires: Vec<WireDecl>,
     out_wire: Option<WireDecl>,
+    disabled_if_false: Option<String>,
     action: Action,
     mandatory: bool,
 }
@@ -184,18 +186,21 @@ pub struct FixedFunction {
 impl FixedFunction {
     fn read_port(number: &str, output: &str) -> FixedFunction {
         FixedFunction {
+            name: format!("read port for {}", output),
             in_wires: vec!(WireDecl::synthetic(number, 4)),
             out_wire: Some(WireDecl::synthetic(output, 64)),
             action: Action::ReadProgramRegister {
                 number: String::from(number),
                 out_port: String::from(output),
             },
+            disabled_if_false: None,
             mandatory: false,
         }
     }
 
     fn write_port(number: &str, input: &str) -> FixedFunction {
         FixedFunction {
+            name: format!("write port for {}", input),
             in_wires: vec!(
                 WireDecl::synthetic(number, 4),
                 WireDecl::synthetic(input, 64)
@@ -205,6 +210,7 @@ impl FixedFunction {
                 number: String::from(number),
                 in_port: String::from(input),
             },
+            disabled_if_false: None,
             mandatory: false,
         }
     }
@@ -213,12 +219,15 @@ impl FixedFunction {
 pub fn y86_fixed_functions() -> Vec<FixedFunction> {
     return vec!(
         FixedFunction {
+            name: String::from("simulator control signal 'Stat'"),
             in_wires: vec!(WireDecl::synthetic("Stat", 3)),
             out_wire: None,
             action: Action::SetStatus { in_wire: String::from("Stat") },
             mandatory: true,
+            disabled_if_false: None,
         },
         FixedFunction {
+            name: String::from("instruction memory"),
             in_wires: vec!(WireDecl::synthetic("pc", 64)),
             out_wire: Some(WireDecl::synthetic("i10bytes", 80)),
             action: Action::ReadMemory {
@@ -229,8 +238,10 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 is_instruction: true,
             },
             mandatory: true,
+            disabled_if_false: None,
         },
         FixedFunction {
+            name: String::from("data memory read port"),
             in_wires: vec!(
                 WireDecl::synthetic("mem_addr", 64),
                 WireDecl::synthetic("mem_readbit", 1)
@@ -243,15 +254,18 @@ pub fn y86_fixed_functions() -> Vec<FixedFunction> {
                 bytes: 8,
                 is_instruction: false,
             },
+            disabled_if_false: Some(String::from("mem_readbit")),
             mandatory: false,
         },
         FixedFunction {
+            name: String::from("data memory write port"),
             in_wires: vec!(
                 WireDecl::synthetic("mem_addr", 64),
                 WireDecl::synthetic("mem_input", 64),
                 WireDecl::synthetic("mem_writebit", 1)
             ),
             out_wire: None,
+            disabled_if_false: Some(String::from("mem_writebit")),
             action: Action::WriteMemory {
                 is_write: Some(String::from("mem_writebit")),
                 address: String::from("mem_addr"),
@@ -347,6 +361,104 @@ fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<Stri
     }
 }
 
+struct FixedFunctionInfo<'a> {
+    needed_fixed_inputs: HashSet<&'a str>,
+    used_fixed_inputs: HashSet<&'a str>,
+    fixed_by_output: HashMap<&'a str, &'a FixedFunction>,
+    fixed_no_output: Vec<&'a FixedFunction>,
+}
+
+// if any piece of fixed functionality was not created because some but not all of its
+// inputs exist, trigger an error unless all those inputs are used by other fixed
+// functionality.
+
+// this makes doing something like setting reg_dstE without setting reg_inputE an error,
+// but doesn't make something like setting mem_addr without mem_writebit an error
+fn preprocess_fixed<'a>(
+    graph: &mut Graph<&'a str>,
+    constants: &'a WireValues,
+    assignments: &'a HashMap<&'a str, &SpannedExpr>,
+    known_values: &'a HashSet<&'a str>,
+    fixed_functions: &'a Vec<FixedFunction>,
+) -> Result<FixedFunctionInfo<'a>, Error> {
+    let mut info = FixedFunctionInfo {
+        needed_fixed_inputs: HashSet::new(),
+        used_fixed_inputs: HashSet::new(),
+        fixed_by_output: HashMap::new(),
+        fixed_no_output: Vec::new(),
+    };
+
+    let mut errors = Vec::new();
+
+    for fixed in fixed_functions.iter() {
+        let mut missing_inputs: Vec<&str> = Vec::new();
+        let mut included_inputs: Vec<&str> = Vec::new();
+        for in_name in &fixed.in_wires {
+            if known_values.contains(in_name.name.as_str()) {
+                panic!("unexpected duplicate definition of {}", in_name.name.as_str());
+            }
+            if !assignments.contains_key(in_name.name.as_str()) {
+                missing_inputs.push(in_name.name.as_str());
+            } else {
+                included_inputs.push(in_name.name.as_str());
+            }
+        }
+        if fixed.mandatory && missing_inputs.len() > 0 {
+            for item in &missing_inputs {
+                errors.push(Error::UnsetBuiltinWire(String::from(*item)));
+            }
+        } else if missing_inputs.len() > 0 {
+            if let Some(ref decl) = fixed.out_wire {
+                if graph.contains_node(&decl.name.as_str()) {
+                    for item in &missing_inputs {
+                        errors.push(Error::UnsetBuiltinWire(String::from(*item)));
+                    }
+                }
+            }
+            if missing_inputs.len() != fixed.in_wires.len() {
+                let mut is_disabled = false;
+                if let Some(enable_signal) = &fixed.disabled_if_false {
+                    if let Some(ref enable_expr) = assignments.get(enable_signal.as_str()) {
+                        if let Ok(value) = enable_expr.evaluate(constants) {
+                            is_disabled = !value.is_true();
+                        }
+                    }
+                }
+                if !is_disabled {
+                    errors.push(Error::PartialFixedInput {
+                        name: String::from(&fixed.name),
+                        found_inputs: included_inputs.into_iter().map(String::from).collect(),
+                        missing_inputs: missing_inputs.into_iter().map(String::from).collect(),
+                    });
+                }
+            }
+            continue;
+        }
+        match fixed.out_wire {
+            None => {
+                info.fixed_no_output.push(fixed);
+            },
+            Some(ref decl) => {
+                if known_values.contains(decl.name.as_str()) ||
+                   assignments.contains_key(decl.name.as_str()) {
+                    panic!("unexpected duplicate definition of {}", decl.name);
+                }
+                info.fixed_by_output.insert(decl.name.as_str(), fixed);
+                for in_name in &fixed.in_wires {
+                    info.used_fixed_inputs.insert(in_name.name.as_str());
+                    graph.insert(in_name.name.as_str(), decl.name.as_str());
+                }
+            }
+        }
+    }
+    
+    if errors.len() > 0 {
+        Err(Error::MultipleErrors(errors))
+    } else {
+        Ok(info)
+    }
+}
+
 fn assignments_to_actions<'a>(
         assignments: &'a HashMap<&'a str, &SpannedExpr>,
         widths: &'a HashMap<&'a str, WireWidth>,
@@ -356,8 +468,6 @@ fn assignments_to_actions<'a>(
         assign_spans: &'a HashMap<&'a str, Span>,
         constants: &'a WireValues,
     ) -> Result<Vec<Action>, Error> {
-    let mut fixed_by_output = HashMap::new();
-    let mut fixed_no_output = Vec::new();
     let mut graph = Graph::new();
     for (name, expr) in assignments {
         graph.add_node(*name);
@@ -368,89 +478,11 @@ fn assignments_to_actions<'a>(
         }
     }
 
-    let mut unused_fixed_inputs = HashSet::new();
-    let mut used_fixed_inputs = HashSet::new();
-    for fixed in fixed_functions.iter() {
-        let mut missing_inputs: Vec<&str> = Vec::new();
-        for in_name in &fixed.in_wires {
-            if known_values.contains(in_name.name.as_str()) {
-                panic!("unexpected duplicate definition of {}", in_name.name.as_str());
-            }
-            if !assignments.contains_key(in_name.name.as_str()) {
-                missing_inputs.push(in_name.name.as_str());
-            }
-        }
-        if fixed.mandatory && missing_inputs.len() > 0 {
-            let missing_list = missing_inputs.iter().map(|x| Error::UnsetBuiltinWire(String::from(*x))).collect();
-            return Err(Error::MultipleErrors(missing_list));
-        } else if missing_inputs.len() > 0 {
-            if let Some(ref decl) = fixed.out_wire {
-                if graph.contains_node(&decl.name.as_str()) {
-                    let missing_list = missing_inputs.iter().map(|x| Error::UnsetBuiltinWire(String::from(*x))).collect();
-                    return Err(Error::MultipleErrors(missing_list));
-                }
-            }
-            if missing_inputs.len() != fixed.in_wires.len() {
-                for in_name in &fixed.in_wires {
-                    if assignments.contains_key(in_name.name.as_str()) {
-                        unused_fixed_inputs.insert(in_name.name.as_str());
-                    }
-                }
-            }
-            debug!("not initializing {:?} due to missing inputs", fixed);
-            continue;
-        }
-        match fixed.out_wire {
-            None => {
-                fixed_no_output.push(fixed);
-            },
-            Some(ref decl) => {
-                if known_values.contains(decl.name.as_str()) ||
-                   assignments.contains_key(decl.name.as_str()) {
-                    panic!("unexpected duplicate definition of {}", decl.name);
-                }
-                fixed_by_output.insert(decl.name.as_str(), fixed);
-                for in_name in &fixed.in_wires {
-                    used_fixed_inputs.insert(in_name.name.as_str());
-                    graph.insert(in_name.name.as_str(), decl.name.as_str());
-                }
-            }
-        }
-    }
-
-    // if any piece of fixed functionality was not created because some but not all of its
-    // inputs exist, trigger an error unless all those inputs are used by other fixed
-    // functionality.
-
-    // this makes doing something like setting reg_dstE without setting reg_inputE an error,
-    // but doesn't make something like setting mem_addr without mem_writebit an error
-    {
-        let mut bad_inputs = Vec::new();
-        for name in unused_fixed_inputs {
-            if !used_fixed_inputs.contains(name) {
-                bad_inputs.push(name);
-            }
-        }
-
-        if bad_inputs.len() > 0 {
-            let mut errors = Vec::new();
-            for bad_input in bad_inputs {
-                let mut matching_fixed: Vec<Vec<String>> = Vec::new();
-                for fixed in fixed_functions.iter() {
-                    if fixed.in_wires.iter().find(|x| x.name == bad_input).is_some() {
-                        matching_fixed.push(
-                            fixed.in_wires.iter().map(|x| x.name.clone()).collect()
-                        )
-                    }
-                }
-                errors.push(Error::PartialFixedInput {
-                    found_input: String::from(bad_input),
-                    all_inputs: matching_fixed,
-                });
-            }
-            return Err(Error::MultipleErrors(errors));
-        }
-    }
+    let fixed_info = preprocess_fixed(&mut graph, constants, assignments, known_values, fixed_functions)?;
+    let (fixed_by_output, fixed_no_output) = (
+        fixed_info.fixed_by_output,
+        fixed_info.fixed_no_output
+    );
 
     let mut result = Vec::new();
 

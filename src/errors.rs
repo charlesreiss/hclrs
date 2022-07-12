@@ -5,6 +5,7 @@ use std::error;
 use std::fmt;
 use std::io::Write;
 use std::io;
+use std::borrow::Borrow;
 
 use lalrpop_util::{ErrorRecovery, ParseError};
 
@@ -53,8 +54,9 @@ pub enum Error {
     DoubleAssignedFixedOutWire(String, Span),
     RedeclaredBuiltinWire(String, Span),
     PartialFixedInput {
-        found_input: String,
-        all_inputs: Vec<Vec<String>>,
+        name: String,
+        found_inputs: Vec<String>,
+        missing_inputs: Vec<String>,
     },
     WireLoop(Vec<String>),
     InvalidWireWidth(Span),
@@ -224,6 +226,27 @@ fn format_token_list(tokens: &Vec<String>) -> String {
     formatted_list
 }
 
+fn list_with_and<'a, A: AsRef<str> + Borrow<str>>(items: &'a Vec<A>) -> String {
+    let mut lst = String::from("");
+    if items.len() > 2 {
+        lst.push_str("'");
+        lst = items[0..items.len() - 1].join("', '");
+        lst.push_str(", and ");
+        lst.push_str(items[items.len() - 1].as_ref());
+    } else if items.len() == 2 {
+        lst.push_str("'");
+        lst.push_str(items[0].as_ref());
+        lst.push_str("' and '");
+        lst.push_str(items[1].as_ref());
+        lst.push_str("'");
+    } else if items.len() == 1 {
+        lst.push_str("'");
+        lst.push_str(items[0].as_ref());
+        lst.push_str("'");
+    }
+    lst
+}
+
 impl Error {
     pub fn format_for_contents<W: Write>(&self, output: &mut W, contents: &FileContents) -> Result<(), io::Error> {
         match *self {
@@ -387,26 +410,12 @@ impl Error {
                 error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
             },
-            Error::PartialFixedInput { ref found_input, ref all_inputs } => {
+            Error::PartialFixedInput { ref name, ref found_inputs, ref missing_inputs } => {
                 // FIXME: error should identify missing input
-                error(output, &format!("Wire '{}' set, but not the rest of this piece of fixed functionality.", found_input))?;
-                for input_set in all_inputs.into_iter() {
-                    let mut filtered_set: Vec<String> = input_set.into_iter().filter(|x| *x != found_input).cloned().collect();
-                    filtered_set.sort();
-                    let mut lst = String::from("");
-                    if filtered_set.len() > 2 {
-                        lst = filtered_set[0..filtered_set.len() - 1].join(", ");
-                        lst.push_str(", and ");
-                        lst.push_str(&filtered_set[filtered_set.len() - 1]);
-                    } else if filtered_set.len() == 2 {
-                        lst.push_str(&filtered_set[0]);
-                        lst.push_str(" and ");
-                        lst.push_str(&filtered_set[1]);
-                    } else if filtered_set.len() == 1 {
-                        lst.push_str(&filtered_set[0])
-                    } else {
-                        continue;
-                    }
+                let wire_list = list_with_and(found_inputs);
+                error(output, &format!("Wire {} set, but not the rest of the {}.", wire_list, name))?;
+                if missing_inputs.len() > 0 {
+                    let lst = list_with_and(&missing_inputs);
                     error_continue(output, &format!("(Did you mean to set {}?)", lst))?;
                 }
             },

@@ -677,6 +677,20 @@ fn external_reference() {
     check_reference_dir(&dir);
 }
 
+fn assert_no_errors_for(code: &str) -> () {
+    let file_contents = FileContents::new_from_data(Y86_PREAMBLE, code, "test.hcl");
+    match parse_y86_hcl(&file_contents) {
+        Ok(_) => {
+            assert!(true);
+        },
+        Err(e) => {
+            let mut output: Vec<u8> = Vec::new();
+            e.format_for_contents(&mut output, &file_contents).unwrap();
+            panic!("unexpected error {:?}", String::from_utf8(output).unwrap());
+        }
+    }
+}
+
 fn get_errors_for(code: &str) -> String {
     let file_contents = FileContents::new_from_data(Y86_PREAMBLE, code, "test.hcl");
     match parse_y86_hcl(&file_contents) {
@@ -936,9 +950,10 @@ Stat = STAT_AOK;
 mem_addr = 0x42;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Wire 'mem_addr' set, but not the rest of this piece of fixed functionality."));
-    assert!(message.contains("Did you mean to set mem_readbit?"));
-    assert!(message.contains("Did you mean to set mem_input and mem_writebit?"));
+    assert!(message.contains("Wire 'mem_addr' set, but not the rest of the data memory read port."));
+    assert!(message.contains("Wire 'mem_addr' set, but not the rest of the data memory write port."));
+    assert!(message.contains("Did you mean to set 'mem_readbit'?"));
+    assert!(message.contains("Did you mean to set 'mem_input' and 'mem_writebit'?"));
 }
 
 #[test]
@@ -983,6 +998,8 @@ Stat = STAT_AOK;
 wire quux : 64;
 mem_addr = 0;
 mem_readbit = quux[0..1];
+mem_writebit = 0;
+mem_input = 0;
 quux = mem_output;
 ");
     debug!("error message is {}", message);
@@ -1982,3 +1999,52 @@ fn disallow_unreachable_mux_error() {
     debug!("message is {:?}", message);
     assert!(message.contains("has at least one case that will never be reached"));
 }
+
+#[test]
+fn reassign_constant_error() {
+    init_logger();
+    let message = get_errors_for("
+        const FOO = 1;
+        const FOO = 2;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("FOO"));
+}
+
+#[test]
+fn reassign_constant_selfref_error() {
+    init_logger();
+    let message = get_errors_for("
+        const FOO = 1;
+        const FOO = FOO;
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("FOO"));
+}
+
+#[test]
+fn non_const_register_default() {
+    init_logger();
+    let message = get_errors_for("
+        wire foo : 1;
+        foo = 0;
+        register aB {
+           example : 1 = foo;
+        };
+    ");
+    debug!("message is {:?}", message);
+    assert!(message.contains("non-constant wire 'foo'"));
+}
+
+#[test]
+fn mem_input_with_mem_writebit_0() {
+    init_logger();
+    assert_no_errors_for("
+        mem_writebit = 0;
+        mem_readbit = 1;
+        mem_addr = 0x0;
+        Stat = STAT_AOK;
+        pc = 0;
+    ");
+}
+// FIXME: test of running it?
