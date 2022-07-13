@@ -186,7 +186,7 @@ pub struct FixedFunction {
 impl FixedFunction {
     fn read_port(number: &str, output: &str) -> FixedFunction {
         FixedFunction {
-            name: format!("read port for {}", output),
+            name: format!("register file read port with {}", number),
             in_wires: vec!(WireDecl::synthetic(number, 4)),
             out_wire: Some(WireDecl::synthetic(output, 64)),
             action: Action::ReadProgramRegister {
@@ -200,7 +200,7 @@ impl FixedFunction {
 
     fn write_port(number: &str, input: &str) -> FixedFunction {
         FixedFunction {
-            name: format!("write port for {}", input),
+            name: format!("register file write port with {}", number),
             in_wires: vec!(
                 WireDecl::synthetic(number, 4),
                 WireDecl::synthetic(input, 64)

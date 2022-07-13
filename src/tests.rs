@@ -929,6 +929,19 @@ Stat = STAT_AOK;
 }
 
 #[test]
+fn error_double_assigned_fixed_wire_2() {
+    init_logger();
+    let message = get_errors_for("
+pc = 0;
+Stat = STAT_AOK;
+reg_outputA = 42;
+");
+    debug!("error message is {}", message);
+    assert!(message.contains("Wire 'reg_outputA' is output for the register file read port with reg_srcA but is assigned here:"));
+    assert!(message.contains("reg_outputA = 42"));
+}
+
+#[test]
 fn error_redeclared_builtin_wire() {
     init_logger();
     let message = get_errors_for("
