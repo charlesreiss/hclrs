@@ -924,7 +924,7 @@ i10bytes = 42;
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Wire 'i10bytes' is output for fixed functionality but is assigned here:"));
+    assert!(message.contains("Wire 'i10bytes' is output for the instruction memory but is assigned here:"));
     assert!(message.contains("i10bytes = 42"));
 }
 

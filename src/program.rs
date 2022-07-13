@@ -635,7 +635,7 @@ impl Program {
         let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
         let mut register_banks_raw = Vec::new();
-        let mut fixed_out_wires = HashSet::new();
+        let mut fixed_out_wires = HashMap::new();
         let mut register_in_spans = HashMap::new();
         let mut wire_to_type = HashMap::new();
         let mut errors = Vec::new();
@@ -647,7 +647,7 @@ impl Program {
             for ref decl in &fixed.out_wire {
                 wire_to_type.insert(decl.name.clone(), WireType::BuiltinOutput);
                 wires.insert(decl.name.as_str(), decl.width);
-                fixed_out_wires.insert(decl.name.as_str());
+                fixed_out_wires.insert(decl.name.as_str(), fixed.name.as_str());
             }
         }
         for statement in &statements {
@@ -679,11 +679,13 @@ impl Program {
                                         *assign_spans.get(name.as_str()).unwrap(),
                                     )
                                 );
-                            } else if fixed_out_wires.contains(name.as_str()) {
+                            } else if fixed_out_wires.contains_key(name.as_str()) {
                                 errors.push(
-                                    Error::DoubleAssignedFixedOutWire(
-                                        name.clone(), *span,
-                                    )
+                                    Error::DoubleAssignedFixedOutWire {
+                                        name: name.clone(), 
+                                        span: *span,
+                                        fixed_name: String::from(*fixed_out_wires.get(name.as_str()).unwrap()),
+                                    }
                                 );
                             }
                             assignments.insert(name.as_str(), &assign.value);

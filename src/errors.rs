@@ -51,7 +51,7 @@ pub enum Error {
         old_span: Span,
         new_span: Span
     },
-    DoubleAssignedFixedOutWire(String, Span),
+    DoubleAssignedFixedOutWire { name: String, span: Span, fixed_name: String },
     RedeclaredBuiltinWire(String, Span),
     PartialFixedInput {
         name: String,
@@ -390,9 +390,9 @@ impl Error {
                 error_continue(output, "After being assigned here:")?;
                 write!(output, "{}", contents.show_region(old_span.0, old_span.1))?;
             },
-            Error::DoubleAssignedFixedOutWire(ref name, ref new_span) => {
-                error(output, &format!("Wire '{}' is output for fixed functionality but is assigned here:", name))?;
-                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
+            Error::DoubleAssignedFixedOutWire { ref name, ref span, ref fixed_name } => {
+                error(output, &format!("Wire '{}' is output for the {} but is assigned here:", name, fixed_name))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             Error::DoubleAssignedRegisterWire { ref name, ref register_span , ref assign_span } => {
                 error(output, &format!("Wire '{}' is output of a register declared here:", name))?;
@@ -622,7 +622,7 @@ impl error::Error for Error {
             Error::UnsetUndeclaredWire(_) => "wire required but never declared",
             Error::UnsetRegisterInputWire {..} => "builtin wire required but never assigned",
             Error::DoubleAssignedWire(_,_,_) => "multiply assigned wire found",
-            Error::DoubleAssignedFixedOutWire(_,_) => "wire assigned by fixed functionality also assigned manually",
+            Error::DoubleAssignedFixedOutWire {..} => "wire assigned by fixed functionality also assigned manually",
             Error::DoubleAssignedRegisterWire {..} => "wire assigned by register also assigned manually",
             Error::DoubleDeclaredRegisterOutWire {..} => "multiply declared register out wire found",
             Error::RedeclaredWire(_,_,_) => "multiply defined wire found",
