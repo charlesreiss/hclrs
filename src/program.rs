@@ -600,7 +600,7 @@ const FALSE = 0;
 
 fn check_double_declare<'a, 'b>(errors: &'b mut Vec<Error>, name: &'a str, span: Span,
                        wire_decl_spans: &'b mut HashMap<&'a str, Span>,
-                       wires: &'b HashMap<&'a str, WireWidth>) {
+                       fixed_to_component_name: &'b HashMap<&'a str, &'a str>) {
     match wire_decl_spans.get(name) {
         Some(other_span) => {
             errors.push(
@@ -608,10 +608,17 @@ fn check_double_declare<'a, 'b>(errors: &'b mut Vec<Error>, name: &'a str, span:
             );
         },
         None => {
-            if wires.contains_key(name) {
-                errors.push(
-                    Error::RedeclaredBuiltinWire(String::from(name), span)
-                );
+            match fixed_to_component_name.get(name) {
+                Some(fixed_name) => {
+                    errors.push(
+                        Error::RedeclaredBuiltinWire {
+                            name: String::from(name),
+                            span: span,
+                            fixed_name: String::from(*fixed_name),
+                        }
+                    );
+                },
+                None => {},
             }
         },
     }
@@ -635,7 +642,8 @@ impl Program {
         let mut needed_wires = HashSet::new();
         let mut assignments = HashMap::new();
         let mut register_banks_raw = Vec::new();
-        let mut fixed_out_wires = HashMap::new();
+        let mut fixed_to_component_name = HashMap::new();
+        let mut fixed_out_wires = HashSet::new();
         let mut register_in_spans = HashMap::new();
         let mut wire_to_type = HashMap::new();
         let mut errors = Vec::new();
@@ -643,11 +651,13 @@ impl Program {
             for ref in_wire in &fixed.in_wires {
                 wire_to_type.insert(in_wire.name.clone(), WireType::BuiltinInput);
                 wires.insert(in_wire.name.as_str(), in_wire.width);
+                fixed_to_component_name.insert(in_wire.name.as_str(), fixed.name.as_str());
             }
             for ref decl in &fixed.out_wire {
                 wire_to_type.insert(decl.name.clone(), WireType::BuiltinOutput);
                 wires.insert(decl.name.as_str(), decl.width);
-                fixed_out_wires.insert(decl.name.as_str(), fixed.name.as_str());
+                fixed_out_wires.insert(decl.name.as_str());
+                fixed_to_component_name.insert(decl.name.as_str(), fixed.name.as_str());
             }
         }
         for statement in &statements {
@@ -655,7 +665,7 @@ impl Program {
                 Statement::ConstDecls(ref decls) => {
                     for ref decl in decls {
                         check_double_declare(&mut errors, decl.name.as_str(), decl.name_span,
-                                        &mut wire_decl_spans, &wires);
+                                             &mut wire_decl_spans, &fixed_to_component_name);
                         wire_to_type.insert(decl.name.clone(), WireType::Constant);
                         constants_raw.insert(decl.name.as_str(), &decl.value);
                     }
@@ -663,7 +673,7 @@ impl Program {
                 Statement::WireDecls(ref decls) => {
                     for ref decl in decls {
                         check_double_declare(&mut errors, decl.name.as_str(), decl.span,
-                                        &mut wire_decl_spans, &wires);
+                                             &mut wire_decl_spans, &fixed_to_component_name);
                         wires.insert(decl.name.as_str(), decl.width);
                         wire_to_type.insert(decl.name.clone(), WireType::Normal);
                         needed_wires.insert(decl.name.as_str());
@@ -679,12 +689,14 @@ impl Program {
                                         *assign_spans.get(name.as_str()).unwrap(),
                                     )
                                 );
-                            } else if fixed_out_wires.contains_key(name.as_str()) {
+                            } else if fixed_out_wires.contains(name.as_str()) {
                                 errors.push(
                                     Error::DoubleAssignedFixedOutWire {
                                         name: name.clone(), 
                                         span: *span,
-                                        fixed_name: String::from(*fixed_out_wires.get(name.as_str()).unwrap()),
+                                        fixed_name: String::from(
+                                            *fixed_to_component_name.get(name.as_str()).unwrap()
+                                        ),
                                     }
                                 );
                             }

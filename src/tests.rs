@@ -950,7 +950,7 @@ pc = 0;
 Stat = STAT_AOK;
 ");
     debug!("error message is {}", message);
-    assert!(message.contains("Builtin wire 'i10bytes' redeclared here:"));
+    assert_regex_match(&message, "Builtin wire 'i10bytes'.*redeclared here:");
     assert!(message.contains("wire i10bytes : 64"));
 }
 

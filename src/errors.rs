@@ -52,7 +52,7 @@ pub enum Error {
         new_span: Span
     },
     DoubleAssignedFixedOutWire { name: String, span: Span, fixed_name: String },
-    RedeclaredBuiltinWire(String, Span),
+    RedeclaredBuiltinWire { name: String, span: Span, fixed_name: String },
     PartialFixedInput {
         name: String,
         found_inputs: Vec<String>,
@@ -406,9 +406,9 @@ impl Error {
                 error_continue(output, &format!("but would also be used by register declared here:"))?;
                 write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
             },
-            Error::RedeclaredBuiltinWire(ref name, ref new_span) => {
-                error(output, &format!("Builtin wire '{}' redeclared here:", name))?;
-                write!(output, "{}", contents.show_region(new_span.0, new_span.1))?;
+            Error::RedeclaredBuiltinWire { ref name, ref span, ref fixed_name } => {
+                error(output, &format!("Builtin wire '{}' (part of the {}) redeclared here:", name, fixed_name))?;
+                write!(output, "{}", contents.show_region(span.0, span.1))?;
             },
             Error::PartialFixedInput { ref name, ref found_inputs, ref missing_inputs } => {
                 // FIXME: error should identify missing input
@@ -626,7 +626,7 @@ impl error::Error for Error {
             Error::DoubleAssignedRegisterWire {..} => "wire assigned by register also assigned manually",
             Error::DoubleDeclaredRegisterOutWire {..} => "multiply declared register out wire found",
             Error::RedeclaredWire(_,_,_) => "multiply defined wire found",
-            Error::RedeclaredBuiltinWire(_,_) => "redefined wire from fixed functionality",
+            Error::RedeclaredBuiltinWire {..} => "redefined wire from fixed functionality",
             Error::PartialFixedInput {..} => "part of fixed functionality set, but not all",
             Error::WireLoop(_) => "circular dependency between wires found",
             Error::InvalidWireWidth(_) => "wire width out of range",
