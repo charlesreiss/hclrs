@@ -362,8 +362,6 @@ fn resolve_constants(exprs: &HashMap<&str, &SpannedExpr>) -> Result<HashMap<Stri
 }
 
 struct FixedFunctionInfo<'a> {
-    needed_fixed_inputs: HashSet<&'a str>,
-    used_fixed_inputs: HashSet<&'a str>,
     fixed_by_output: HashMap<&'a str, &'a FixedFunction>,
     fixed_no_output: Vec<&'a FixedFunction>,
 }
@@ -382,8 +380,6 @@ fn preprocess_fixed<'a>(
     fixed_functions: &'a Vec<FixedFunction>,
 ) -> Result<FixedFunctionInfo<'a>, Error> {
     let mut info = FixedFunctionInfo {
-        needed_fixed_inputs: HashSet::new(),
-        used_fixed_inputs: HashSet::new(),
         fixed_by_output: HashMap::new(),
         fixed_no_output: Vec::new(),
     };
@@ -445,7 +441,6 @@ fn preprocess_fixed<'a>(
                 }
                 info.fixed_by_output.insert(decl.name.as_str(), fixed);
                 for in_name in &fixed.in_wires {
-                    info.used_fixed_inputs.insert(in_name.name.as_str());
                     graph.insert(in_name.name.as_str(), decl.name.as_str());
                 }
             }
